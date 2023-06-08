@@ -1,0 +1,18 @@
+# simple.world
+include "map.inc"
+include "robot.inc"
+
+# Configure the environment
+floorplan
+(
+    bitmap "bitmaps/floor.png"
+    size [215.4 166.8 0.2]
+)
+
+# Spawn the robot
+pioneer2dx
+(
+    name "robot"
+    pose [2 50.7 0 45]
+)
+

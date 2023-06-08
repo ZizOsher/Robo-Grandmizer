@@ -1,0 +1,3 @@
+/home/oem/p_s/player_stage_test/build/CMakeFiles/simple_client.dir
+/home/oem/p_s/player_stage_test/build/CMakeFiles/edit_cache.dir
+/home/oem/p_s/player_stage_test/build/CMakeFiles/rebuild_cache.dir
