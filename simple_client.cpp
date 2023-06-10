@@ -23,7 +23,7 @@ namespace MyNamespace {
     struct Node {
         Point point;
         double cost; // Cost of reaching this node from the start.
-        double priority; // Priority in the queue (cost + heuristic estimate).
+        double priority;
 
         Node(Point point, double cost, double priority) : point(point), cost(cost), priority(priority) {}
     };
@@ -41,11 +41,11 @@ struct ComparePoints {
     }
 };
 
-double heuristic(const MyNamespace::Point& a, const MyNamespace::Point& b);
+
 std::vector<MyNamespace::Point> reconstructPath(const std::map<MyNamespace::Point, MyNamespace::Point, ComparePoints>& cameFrom, const MyNamespace::Point& current);
 std::vector<MyNamespace::Point> getNeighbors(const MyNamespace::Point& point, const Eigen::MatrixXd& matrix);
 
-std::vector<MyNamespace::Point> astar(const Eigen::MatrixXd& matrix, const MyNamespace::Point& start, const MyNamespace::Point& target) {
+std::vector<MyNamespace::Point> astar(const Eigen::MatrixXd& matrix, const MyNamespace::Point& start, const MyNamespace::Point& target, std::string direction) {
     int rows = matrix.rows();
     int cols = matrix.cols();
 
@@ -59,7 +59,7 @@ std::vector<MyNamespace::Point> astar(const Eigen::MatrixXd& matrix, const MyNam
     std::map<MyNamespace::Point, double, ComparePoints> costSoFar;
 
     // Initialize the start node and add it to the queue.
-    MyNamespace::Node startNode {start, 0.0, heuristic(start, target)};
+    MyNamespace::Node startNode {start, 0.0, 0.0};
     queue.push(startNode);
 
     while (!queue.empty()) {
@@ -75,11 +75,27 @@ std::vector<MyNamespace::Point> astar(const Eigen::MatrixXd& matrix, const MyNam
         // Check all neighboring nodes.
         for (const MyNamespace::Point& next : getNeighbors(current.point, matrix)) {
             double newCost = costSoFar[current.point] + 1; // Assume all movements have the same cost.
-
+            if (direction == "right") {
+                if (next.y < current.point.y || next.x != current.point.x) {
+                    newCost += 1;
+                }
+            } else if (direction == "left") {
+                if (next.y > current.point.y || next.x != current.point.x) {
+                    newCost += 1;
+                }
+            } else if (direction == "up") {
+                if (next.x > current.point.x || next.y != current.point.y) {
+                    newCost += 1;
+                }
+            } else if (direction == "down") {
+                if (next.x > current.point.x || next.y != current.point.y) {
+                    newCost += 1;
+                }
+            }
             // If this node hasn't been visited yet, or if the new path is cheaper, update the data.
             if (!costSoFar.count(next) || newCost < costSoFar[next]) {
                 costSoFar[next] = newCost;
-                double priority = newCost + heuristic(next, target);
+                double priority = newCost;
                 queue.push(MyNamespace::Node {next, newCost, priority});
                 cameFrom[next] = current.point;
             }
@@ -98,16 +114,12 @@ std::vector<MyNamespace::Point> getNeighbors(const MyNamespace::Point& point, co
         MyNamespace::Point next {point.x + move.x, point.y + move.y};
 
         // Check if the point is within the matrix boundaries and is not blocked.
-        if (next.x >= 0 && next.x < matrix.rows() && next.y >= 0 && next.y < matrix.cols() && matrix(next.x, next.y) >= 0) {
+        if (next.x >= 0 && next.x < matrix.rows() && next.y >= 0 && next.y < matrix.cols() && matrix(next.x, next.y) == 1) {
             neighbors.push_back(next);
         }
     }
 
     return neighbors;
-}
-
-double heuristic(const MyNamespace::Point& a, const MyNamespace::Point& b) {
-    return std::abs(a.x - b.x) + std::abs(a.y - b.y);
 }
 
 std::vector<MyNamespace::Point> reconstructPath(const std::map<MyNamespace::Point, MyNamespace::Point, ComparePoints>& cameFrom, const MyNamespace::Point& current) {
@@ -163,26 +175,6 @@ Eigen::MatrixXd loadMatrix(const std::string& filename) {
 }
 
 
-double calculateTurnrate(const MyNamespace::Point& currentLocation, const MyNamespace::Point& target) {
-    // Calculate angle to the target in radians
-    double targetAngle = std::atan2(target.y - currentLocation.y, target.x - currentLocation.x);
-
-    // Calculate current angle. Here we assume the robot starts facing to the right (0 rad). Adjust if necessary.
-    double currentAngle = std::atan2(currentLocation.y, currentLocation.x);
-
-    // Calculate the difference between the current and target angles
-    double angleDiff = targetAngle - currentAngle;
-
-    // Calculate turnrate based on the angle difference. Here we assume a simple linear relationship, you might need to adjust this.
-    double turnrate = 0.1 * angleDiff;
-
-    // Limit the maximum turnrate to a sensible value, for example 0.5 rad/s.
-    turnrate = std::min(turnrate, 0.5);
-    turnrate = std::max(turnrate, -0.5);
-
-    return turnrate;
-}
-
 int main(int argc, char *argv[]) {
     // Load the matrix from the file.
     Eigen::MatrixXd matrix = loadMatrix("../binary_image.txt");
@@ -197,10 +189,15 @@ int main(int argc, char *argv[]) {
     pp.SetMotorEnable(true);
 
     // Set the initial position of the robot.
-    MyNamespace::Point currentLocation{21, 1015};
-    cout << matrix(21,1015);
+    MyNamespace::Point currentLocation{76, 81};
+    std::string direction = "right";
+
 
     while (true) {
+        // Move the robot along the path.
+        std::cout << "CurrentLocation: ";
+        std::cout << currentLocation.x << ", " << currentLocation.y << std::endl;
+
         // Read data from the server.
         client.Read();
 
@@ -210,31 +207,101 @@ int main(int argc, char *argv[]) {
         std::cin >> target.x >> target.y;
 
         // Calculate the path from the current location to the target.
-        std::vector<MyNamespace::Point> path = astar(matrix, currentLocation, target);
-//        std::cout << "Path: ";
-//        for (const MyNamespace::Point& point : path) {
-//            std::cout << "(" << point.x << ", " << point.y << ") ";
-//        }
-//        std::cout << std::endl;
-
-        // Move the robot along the path.
-        int i = 0;
+        std::string dup_direction = direction;
+        std::vector<MyNamespace::Point> path = astar(matrix, currentLocation, target, direction);
+        std::cout << "Path: ";
         for (const MyNamespace::Point& point : path) {
-            // Calculate the speed and direction to get to the next point.
-            double turnrate = calculateTurnrate(currentLocation, point);
-
-
-            // Set the robot's speed and direction.
-            pp.SetSpeed(1, turnrate);
-
+            std::cout << "(" << point.x << ", " << point.y << ") ";
+        }
+        std::cout << std::endl;
+        
+        direction = dup_direction;
+        
+        for (const MyNamespace::Point& point : path) {
+//            std::cout << "X: " << point.x << " Y: " << point.y << endl;
+            std::cout << "Direction: " << direction << std::endl;
+            if (point.x > currentLocation.x) {
+                if (direction == "down") {
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "up") {
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "right") {
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "left"){
+                    pp.SetSpeed(0, 0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                }
+                direction = "down";      
+            } else if (point.x < currentLocation.x) {
+                if (direction == "up") {
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "down") {
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "left") {
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "right"){
+                    pp.SetSpeed(0, 0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                }
+                direction = "up";
+            } else if (point.y < currentLocation.y) {
+                if (direction == "left") {
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "right") {
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "down") {
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "up"){
+                    pp.SetSpeed(0, 0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                }
+                direction = "left";
+            } else if (point.y > currentLocation.y) {
+                    if (direction == "right") {
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "left") {
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "up") {
+                    pp.SetSpeed(0, -0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                } else if (direction == "down"){
+                    pp.SetSpeed(0, 0.8);
+                    usleep(2000000);
+                    pp.SetSpeed(0.7, 0);
+                }
+                direction = "right";
+            }
             // Update the current location.
             currentLocation = point;
-
             // Sleep for a while to give the robot time to move.
-            usleep(10000);
+            usleep(180000);
         }
-
-        // Stop the robot at the target.
         pp.SetSpeed(0, 0);
     }
 

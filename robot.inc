@@ -11,7 +11,7 @@ define pioneer2dx model
     position
     (
         localization "odom"
-        localization_origin [4.37 -4.56 0 0]
+        localization_origin [-97 77.6 0 0]
     )
 
     # Add a laser range finder

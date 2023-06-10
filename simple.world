@@ -6,13 +6,13 @@ include "robot.inc"
 floorplan
 (
     bitmap "bitmaps/floor.png"
-    size [215.4 166.8 0.2]
+    size [215.4 166.8 0.01]
 )
 
 # Spawn the robot
 pioneer2dx
 (
     name "robot"
-    pose [2 50.7 0 45]
+    pose [-97 77.6 0 0]
 )
 
