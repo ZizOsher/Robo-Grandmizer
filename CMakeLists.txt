@@ -5,10 +5,12 @@ set(PLAYERC++_INCLUDE_DIRS "/usr/local/include/player-3.0")
 set(PLAYERC++_LIBRARIES "-lplayerc++")
 set(TIRPC_INCLUDE_DIRS "/usr/include/tirpc")
 
-# Find the OpenCV package.
 find_package(OpenCV REQUIRED)
 
-add_executable(simple_client simple_client.cpp)
+file(GLOB SOURCES "*.cpp")
+
+add_executable(simple_client ${SOURCES})
+#add_executable(simple_client simple_client.cpp)
 
 # Add the OpenCV and PLAYERC++ header directories to the compiler's header search path.
 target_include_directories(simple_client PRIVATE ${OpenCV_INCLUDE_DIRS} ${PLAYERC++_INCLUDE_DIRS} ${TIRPC_INCLUDE_DIRS})
