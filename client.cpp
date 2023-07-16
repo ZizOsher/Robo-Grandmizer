@@ -176,22 +176,15 @@ Eigen::MatrixXd loadMatrix(const std::string& filename) {
 
 
 int main(int argc, char *argv[]) {
-    // Load the matrix from the file.
-    Eigen::MatrixXd matrix = loadMatrix("../binary_image.txt");
-    
+    Eigen::MatrixXd matrix = loadMatrix("../binary_image.txt");  
     // Initialize the client object.
     PlayerClient client("localhost");
-
     // Initialize the position2d proxy to control the robot.
     Position2dProxy pp(&client, 0);
-
-    // Enable the motors.
     pp.SetMotorEnable(true);
-
     // Set the initial position of the robot.
     Pathfinding::Point currentLocation{76, 81};
     std::string direction = "right";
-
 
     while (true) {
         // Move the robot along the path.
