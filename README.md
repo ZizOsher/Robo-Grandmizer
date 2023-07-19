@@ -1,11 +1,14 @@
 # Robo-Grandmizer
 
 To compile run:
-mkdir build && cd build
+mkdir build && cd build 
 make
 
 To run the program run:
-player simple_player.cfg
+cd ..
+player player_simple.cfg
+
+In new terminal:
 cd build
-simple_client
+./client
 

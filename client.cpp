@@ -186,7 +186,8 @@ int main(int argc, char *argv[]) {
     Pathfinding::Point currentLocation{76, 81};
     std::string direction = "right";
 
-    while (true) {
+    int i = 0;
+    while (i<1) {
         // Move the robot along the path.
         std::cout << "CurrentLocation: ";
         std::cout << currentLocation.x << ", " << currentLocation.y << std::endl;
@@ -198,6 +199,7 @@ int main(int argc, char *argv[]) {
         Pathfinding::Point target;
         std::cout << "Enter the target coordinates (x y): ";
         std::cin >> target.x >> target.y;
+        // std::cout << "(" << target.x << ", " << target.y << ") ";
 
         // Calculate the path from the current location to the target.
         std::string dup_direction = direction;
@@ -294,6 +296,7 @@ int main(int argc, char *argv[]) {
             currentLocation = point;
             // Sleep for a while to give the robot time to move.
             usleep(180000);
+            i++;
         }
         pp.SetSpeed(0, 0);
     }

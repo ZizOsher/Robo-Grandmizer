@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(simple_client)
+project(client)
 
 set(PLAYERC++_INCLUDE_DIRS "/usr/local/include/player-3.0")
 set(PLAYERC++_LIBRARIES "-lplayerc++")
