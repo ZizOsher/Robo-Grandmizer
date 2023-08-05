@@ -2,7 +2,8 @@ from PIL import Image
 import numpy as np
 import os
 
-image_path = 'bitmaps/floor-3.png'
+# image_path = 'bitmaps/floor-3.png'
+image_path = 'csfloor.png'
 
 # Open the image file
 with Image.open(image_path) as img:
