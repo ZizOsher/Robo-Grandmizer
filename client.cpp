@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
     Position2dProxy pp(&client, 0);
     pp.SetMotorEnable(true);
     // Set the initial position of the robot.
-    Pathfinding::Point currentLocation{76, 81};
+    Pathfinding::Point currentLocation{91, 276};
     std::string direction = "right";
 
     int i = 0;
