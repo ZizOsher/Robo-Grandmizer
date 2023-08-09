@@ -14,12 +14,12 @@ with Image.open(image_path) as img:
 image_array = np.array(grayscale_img)
 
 # Apply threshold
-binary_image_array = np.where(image_array < 128, 0, 1)
+binary_image_array = np.where(image_array < 128, 1, 0)
 
 # Calculate and print the percentage of black and white pixels
 num_pixels = binary_image_array.size
-num_white_pixels = np.sum(binary_image_array == 1)
-num_black_pixels = np.sum(binary_image_array == 0)
+num_white_pixels = np.sum(binary_image_array == 0)
+num_black_pixels = np.sum(binary_image_array == 1)
 
 print("Percentage of white pixels: ", (num_white_pixels / num_pixels) * 100)
 print("Percentage of black pixels: ", (num_black_pixels / num_pixels) * 100)

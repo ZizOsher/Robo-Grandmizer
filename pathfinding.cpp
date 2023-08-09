@@ -1,3 +1,4 @@
+#include "pathfinding.hpp"
 #include <iostream>
 #include <libplayerc++/playerc++.h>
 #include <opencv2/opencv.hpp>
@@ -6,75 +7,105 @@
 #include <queue>
 #include <fstream>
 
-using namespace boost;
-using namespace std;
+// using namespace boost;
+// using namespace std;
 using namespace PlayerCc;
 using namespace cv;
+namespace pf = Pathfinding;
 
-namespace Pathfinding {
-    struct Point {
-        int x, y;
-
-        bool operator==(const Point& other) const {
-            return x == other.x && y == other.y;
-        }
-    };
-
-    struct Node {
-        Point point;
-        double cost; // Cost of reaching this node from the start.
-        double priority;
-
-        Node(Point point, double cost, double priority) : point(point), cost(cost), priority(priority) {}
-    };
-
-    struct ComparePriority {
-        bool operator()(const Node& a, const Node& b) {
-            return a.priority > b.priority;
-        }
-    };
+bool pf::Point::operator==(const pf::Point& other) const {
+    return x == other.x && y == other.y;
 }
 
-struct ComparePoints {
-    bool operator()(const Pathfinding::Point& a, const Pathfinding::Point& b) const {
-        return std::tie(a.x, a.y) < std::tie(b.x, b.y);
+pf::Node::Node(Point p, double c, double pr) : point(p), cost(c), priority(pr) {}
+
+std::string pf::Point::toString() const {
+        return "(" + std::to_string(x) + ", " + std::to_string(y) + ")";
     }
-};
 
+std::string pf::Node::toString() const {
+    return "Point: " + point.toString() + ", Cost: " + std::to_string(cost) + ", Priority: " + std::to_string(priority);
+}
 
-std::vector<Pathfinding::Point> reconstructPath(const std::map<Pathfinding::Point, Pathfinding::Point, ComparePoints>& cameFrom, const Pathfinding::Point& current);
-std::vector<Pathfinding::Point> getNeighbors(const Pathfinding::Point& point, const Eigen::MatrixXd& matrix);
+bool pf::ComparePriority::operator()(const pf::Node& a, const pf::Node& b) {
+    return a.priority > b.priority;
+}
 
-std::vector<Pathfinding::Point> astar(const Eigen::MatrixXd& matrix, const Pathfinding::Point& start, const Pathfinding::Point& target, std::string direction) {
+bool ComparePoints::operator()(const pf::Point& a, const pf::Point& b) const {
+    return std::tie(a.x, a.y) < std::tie(b.x, b.y);
+}
+
+std::vector<pf::Point> getNeighbors(const pf::Point& point, const Eigen::MatrixXd& matrix) {
+    std::vector<pf::Point> neighbors;
+    std::vector<pf::Point> possibleMoves = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}}; // Moves in 4 directions: up, down, left, right.
+
+    for (const pf::Point& move : possibleMoves) {
+        pf::Point next {point.x + move.x, point.y + move.y};
+
+        if (next.x >= 0 && next.x < matrix.cols() && next.y >= 0 && next.y < matrix.rows()) {
+            if (matrix(next.y, next.x) == 0) {
+                neighbors.push_back(next);
+            }
+        }
+    }
+    return neighbors;
+}
+
+std::vector<pf::Point> reconstructPath(const std::map<pf::Point, pf::Point, ComparePoints>& cameFrom,
+                                        const pf::Point& current) {
+    std::vector<pf::Point> path;
+    pf::Point next = current;
+
+    while (cameFrom.count(next) > 0) {
+        path.push_back(next);
+        next = cameFrom.at(next);
+    }
+
+    // Reverse the path to start from the beginning.
+    std::reverse(path.begin(), path.end());
+
+    return path;
+}
+
+double heuristic(pf::Point a, pf::Point b) {
+    return std::abs(a.x - b.x) + std::abs(a.y - b.y);
+}
+
+std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix,
+                             const pf::Point& start,
+                             const pf::Point& target,
+                             std::string direction) {
     int rows = matrix.rows();
     int cols = matrix.cols();
 
-    // Create a priority queue of nodes to explore.
-    std::priority_queue<Pathfinding::Node, std::vector<Pathfinding::Node>, Pathfinding::ComparePriority> queue;
+    std::priority_queue<pf::Node, std::vector<pf::Node>, pf::ComparePriority> queue;
+    std::map<pf::Point, pf::Point, ComparePoints> cameFrom;
+    std::map<pf::Point, double, ComparePoints> costSoFar;
+    std::set<pf::Point, ComparePoints> closedList;  // The closed set
 
-    // Create a map to store the best path to each node.
-    std::map<Pathfinding::Point, Pathfinding::Point, ComparePoints> cameFrom;
-
-    // Create a map to store the cost of reaching each node.
-    std::map<Pathfinding::Point, double, ComparePoints> costSoFar;
-
-    // Initialize the start node and add it to the queue.
-    Pathfinding::Node startNode {start, 0.0, 0.0};
+    costSoFar[start] = 0;
+    pf::Node startNode {start, 0.0, heuristic(start, target)};
     queue.push(startNode);
 
     while (!queue.empty()) {
-        // Get the node with the highest priority from the queue.
-        Pathfinding::Node current = queue.top();
+        pf::Node current = queue.top();
         queue.pop();
 
-        // If we reached the target, reconstruct and return the path.
+        // If the node has already been processed, continue to the next iteration
+        if (closedList.count(current.point)) continue;
+
         if (current.point == target) {
             return reconstructPath(cameFrom, current.point);
         }
 
-        // Check all neighboring nodes.
-        for (const Pathfinding::Point& next : getNeighbors(current.point, matrix)) {
+        closedList.insert(current.point);  // Mark the current node as processed
+
+        for (const pf::Point& next : getNeighbors(current.point, matrix)) {
+            if (closedList.count(next)) continue;  // Skip processing nodes in the closed list
+
             double newCost = costSoFar[current.point] + 1; // Assume all movements have the same cost.
+            
+            // Directional penalties
             if (direction == "right") {
                 if (next.y < current.point.y || next.x != current.point.x) {
                     newCost += 1;
@@ -92,50 +123,20 @@ std::vector<Pathfinding::Point> astar(const Eigen::MatrixXd& matrix, const Pathf
                     newCost += 1;
                 }
             }
-            // If this node hasn't been visited yet, or if the new path is cheaper, update the data.
+
+            double priority = newCost + heuristic(next, target);
+
             if (!costSoFar.count(next) || newCost < costSoFar[next]) {
                 costSoFar[next] = newCost;
-                double priority = newCost;
-                queue.push(Pathfinding::Node {next, newCost, priority});
+                queue.push(pf::Node {next, newCost, priority});
                 cameFrom[next] = current.point;
             }
         }
     }
-
-    // If there's no path, return an empty path
     return {};
 }
 
-std::vector<Pathfinding::Point> getNeighbors(const Pathfinding::Point& point, const Eigen::MatrixXd& matrix) {
-    std::vector<Pathfinding::Point> neighbors;
-    std::vector<Pathfinding::Point> possibleMoves = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}}; // Moves in 4 directions: up, down, left, right.
 
-    for (const Pathfinding::Point& move : possibleMoves) {
-        Pathfinding::Point next {point.x + move.x, point.y + move.y};
-
-        // Check if the point is within the matrix boundaries and is not blocked.
-        if (next.x >= 0 && next.x < matrix.rows() && next.y >= 0 && next.y < matrix.cols() && matrix(next.x, next.y) == 1) {
-            neighbors.push_back(next);
-        }
-    }
-
-    return neighbors;
-}
-
-std::vector<Pathfinding::Point> reconstructPath(const std::map<Pathfinding::Point, Pathfinding::Point, ComparePoints>& cameFrom, const Pathfinding::Point& current) {
-    std::vector<Pathfinding::Point> path;
-    Pathfinding::Point next = current;
-
-    while (cameFrom.count(next) > 0) {
-        path.push_back(next);
-        next = cameFrom.at(next);
-    }
-
-    // Reverse the path to start from the beginning.
-    std::reverse(path.begin(), path.end());
-
-    return path;
-}
 
 // Matrix maker
 Eigen::MatrixXd loadMatrix(const std::string& filename) {
