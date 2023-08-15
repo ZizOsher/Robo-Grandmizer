@@ -41,9 +41,13 @@ struct ComparePoints {
     bool operator()(const pf::Point& a, const pf::Point& b) const;
 };
 
+// double distance(const pf::Point& a, const pf::Point& b);
 std::vector<pf::Point> reconstructPath(const std::map<pf::Point, pf::Point, ComparePoints>& cameFrom, const pf::Point& current);
 std::vector<pf::Point> getNeighbors(const pf::Point& point, const Eigen::MatrixXd& matrix);
+int countOnesInRadius(const Eigen::MatrixXd& matrix, int y, int x);
 std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix, const pf::Point& start, const pf::Point& target, std::string direction);
 Eigen::MatrixXd loadMatrix(const std::string& filename);
-
+std::vector<pf::Point> getTruePath(const std::vector<pf::Point>& path, pf::Point start, const Eigen::MatrixXd& matrix, int berth);
+bool isPathClear(const Eigen::MatrixXd& matrix, const pf::Point& start, const pf::Point& end, int b);
+std::vector<pf::Point> getTruePath(const std::vector<pf::Point>& path, pf::Point start, const Eigen::MatrixXd& matrix, int b);
 #endif // PATHFINDING_HPP
