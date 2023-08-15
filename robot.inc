@@ -2,7 +2,7 @@
 define pioneer2dx model
 (
     # Robot dimensions
-    size [0.3 0.3 0.5]
+    size [0.2 0.2 0.2]
 
     # Robot base color
     color "blue"
