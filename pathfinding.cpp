@@ -323,8 +323,6 @@ bool isInPolygon(const pf::Point& p1, const pf::Point& p2,
     int minY = std::min({p1.y, q1.y, p2.y, q2.y}) - 1;
     int maxY = std::max({p1.y, q1.y, p2.y, q2.y}) + 1;
 
-    std::cout << "minX=" << minX << ", maxX=" << maxX << ", minY=" << minY << ", maxY=" << maxY << std::endl;
-    std::cout << "r=" << r.toString() << std::endl;
     // Check if r is inside the rectangle
     return r.x >= minX && r.x <= maxX && r.y >= minY && r.y <= maxY;
 }
