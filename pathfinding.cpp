@@ -126,8 +126,7 @@ int countOnesInRadius(const Eigen::MatrixXd& matrix, int y, int x) {
 
 std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix,
                              const pf::Point& start,
-                             const pf::Point& target,
-                             std::string direction) {
+                             const pf::Point& target) {
     int rows = matrix.rows();
     int cols = matrix.cols();
 

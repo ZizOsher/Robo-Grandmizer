@@ -7,6 +7,8 @@
 #include <fstream>
 #include "pathfinding.hpp"
 #include "measurements.hpp"
+#include <nlohmann/json.hpp>
+#include "jsonOperations.hpp"
 
 using namespace boost;
 using namespace PlayerCc;
@@ -14,6 +16,7 @@ using namespace cv;
 using namespace Pathfinding;
 namespace pf = Pathfinding;
 namespace msrmnt = measurements;
+
 
 double normalizeAngle(double angle) {
     while (angle > M_PI) angle -= 2 * M_PI;
@@ -23,16 +26,16 @@ double normalizeAngle(double angle) {
 
 double timeToTurnInMicroseconds(double xRadians, double angularSpeed) {
     double timeInSeconds = xRadians / angularSpeed;
-
-    return timeInSeconds * 1e6;  // Convert time to microseconds
+    // Convert time to microseconds
+    return timeInSeconds * 1e6;
 }
 
-void goToPoint(const pf::Point& currentLocation,
+void goToPoint(pf::Point& currentLocation,
                 PlayerCc::Position2dProxy& pp,
                 double linearSpeed,
                 double angularSpeed,
-                const pf::Point& target) {
-    // Converting current location and target from pixels to world coordinates
+                const pf::Point& target,
+                PlayerClient& client) {
     double currentWorldX = msrmnt::pixel_to_world_x(currentLocation.x);
     double currentWorldY = msrmnt::pixel_to_world_y(currentLocation.y);
     double targetWorldX = msrmnt::pixel_to_world_x(target.x);
@@ -42,48 +45,57 @@ void goToPoint(const pf::Point& currentLocation,
     double dx = targetWorldX - currentWorldX;
     double dy = targetWorldY - currentWorldY;
 
-    // Calculating the desired yaw (orientation) and yaw difference
-    double desiredYaw = normalizeAngle(atan2(dy, dx));
-    std::cout << "Desired yaw: " << desiredYaw << std::endl;
-    double yawDifference = normalizeAngle(desiredYaw - pp.GetYaw());
+    // Step 1: Calculate the Required Yaw Angle in 
+    double requiredYaw = normalizeAngle(atan2(dy, dx)); // Angle in radians
 
-    // If the yaw difference is beyond a threshold, correct the yaw first
-    const double yawThreshold = 0.1;
-    if (std::abs(yawDifference) > yawThreshold) {
-        double turnSpeed = (yawDifference < 0) ? ((-1 ) * angularSpeed) : angularSpeed;  // Adjust angular speed based on yaw difference direction
-        std::cout << "Adjusting yaw. Yaw difference: " << yawDifference << std::endl;
-        std::cout << "Initial Yaw: " << pp.GetYaw() << std::endl;
-        pp.SetSpeed(0, turnSpeed);  // Turn in place
-        usleep(timeToTurnInMicroseconds(std::abs(yawDifference), angularSpeed)+10);  // Sleep for a short duration to give time for the robot to turn
-        std::cout << "New Yaw: " << pp.GetYaw() << std::endl;
-        pp.SetSpeed(0, 0);
-        // return;  // Do not proceed further in this cycle. Just adjust the orientation.
-    }
-
-    // Calculate distance to target
-    double distance = sqrt(dx*dx + dy*dy);
-
-    // Convert the distance from world units to pixels to decide on speed
-    int pixelDistance = msrmnt::world_distance_to_pixel_distance(distance);
-
-    // Depending on the pixel distance, choose a speed
-    double speed = (pixelDistance > 20) ? linearSpeed : linearSpeed / 2.0;  // Reduce speed if close to the target
-
-    // If the distance is very small, stop the robot
-    if (pixelDistance < 1) {
-        pp.SetSpeed(0, 0);
-    } else {
-        pp.SetSpeed(speed, 0);
-    }
+    // Step 2: Rotate the Robot to the Required Yaw Angle
+    double currentYaw;
+    do {
+        client.Read();
+        currentYaw = pp.GetYaw();
+        double yawError = normalizeAngle(requiredYaw - currentYaw);
+        
+        // Set angular speed based on the error
+        if (fabs(yawError) > 0.025) {
+            pp.SetSpeed(0, ((yawError > 0) ? angularSpeed : (-1) * angularSpeed));
+        }
+        usleep(timeToTurnInMicroseconds(std::abs(yawError), angularSpeed));
+    } while(fabs(normalizeAngle(requiredYaw - currentYaw)) > 0.025);
     
-    // Estimate time required in microseconds
-    double timeRequired = distance / linearSpeed; // This gives time in seconds
-    int sleepDuration = static_cast<int>(timeRequired * 1000000);  // Convert to microseconds
+    pp.SetSpeed(0, 0);
     
-    // Sleep for the estimated duration
-    usleep(sleepDuration);
+    // Step 3: Drive the Robot to the Target Point
+    double distanceToTarget;
+    int pixelDistance;
+    do {
+        client.Read();
+
+        currentWorldX = pp.GetXPos();
+        currentWorldY = pp.GetYPos();
+        currentLocation.x = msrmnt::world_to_pixel_x(currentWorldX);
+        currentLocation.y = msrmnt::world_to_pixel_y(currentWorldY);
+
+        std::cout << "Current Location: " << currentWorldX << ", " << currentWorldY << std::endl;
+        std::cout << "Target Location: " << targetWorldX << ", " << targetWorldY << std::endl;
+
+        dx = targetWorldX - currentWorldX;
+        dy = targetWorldY - currentWorldY;
+        distanceToTarget = sqrt(dx*dx + dy*dy);
+        pixelDistance = msrmnt::world_distance_to_pixel_distance(distanceToTarget);
+        std::cout << "Distance to Target: " << distanceToTarget << std::endl;
+        
+        if (pixelDistance > 1 || distanceToTarget > 0.5) {
+            pp.SetSpeed(linearSpeed, 0);
+        }
+    
+        double timeRequired = distanceToTarget / linearSpeed; // This gives time in seconds
+        int sleepDuration = static_cast<int>(timeRequired * 1000000);  // Convert to microseconds
+        usleep(sleepDuration/10000);
+    } while(pixelDistance > 1 || distanceToTarget > 0.5);
+    
+    // Step 4: Stop the Robot
+    pp.SetSpeed(0, 0); // Set linear speed to 0
 }
-
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -91,47 +103,57 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    double linearSpeed = std::stod(argv[1]);
-    double angularSpeed = std::stod(argv[2]);
+    try {
+        double linearSpeed = std::stod(argv[1]);
+        double angularSpeed = std::stod(argv[2]);
 
-    Eigen::MatrixXd matrix = loadMatrix("../binary_image.txt");
-    PlayerClient client("localhost");
-    Position2dProxy pp(&client, 0);
-    pp.SetMotorEnable(true);
-    pf::Point currentLocation{91, 276};
-    std::string direction = "right";
-    
-    int i = 0;
-    while (i < 1) {
-        std::cout << "CurrentLocation: " << currentLocation.x << ", " << currentLocation.y << std::endl;
-        client.Read();
-        pf::Point target;
-        std::cout << "Enter the target coordinates (x y): ";
-        std::cin >> target.x >> target.y;
-
-        std::string dup_direction = direction;
-        std::vector<pf::Point> path = astar(matrix, currentLocation, target, direction);
-        std::cout << "Path: ";
-        for (const pf::Point& point : path) {
-            std::cout << point.toString() << ",";
-        }
-        std::cout << std::endl;
-        std::vector<pf::Point> truePath = getTruePath(path, currentLocation, matrix, 1);
-        std::cout << "True Path: ";
-        for (const pf::Point& point : truePath) {
-            std::cout << point.toString() << ",";
-        }
-        std::cout << std::endl;
+        // Administrative code to read the json file and map doors to rooms
+        auto jsonData = readJsonFile("../csfloor_mapping.json");
+        auto doorRoomMap = mapDoorsToRooms(jsonData);
+        auto roomInOutMap = mapRoomsInOut(jsonData);
+        Eigen::MatrixXd matrix = loadMatrix("../binary_image.txt");
+        PlayerClient client("localhost");
+        Position2dProxy pp(&client, 0);
         
-        for (const pf::Point& point : truePath) {
-            goToPoint(currentLocation, pp, linearSpeed,angularSpeed, point);          
-            // Update current location to the point just reached
-            currentLocation = point;
+        pp.SetMotorEnable(true);
+        pf::Point currentLocation{91, 276};
+        double currentWorldX = msrmnt::pixel_to_world_x(currentLocation.x);
+        double currentWorldY = msrmnt::pixel_to_world_y(currentLocation.y);
+        pp.SetOdometry(currentWorldX, currentWorldY, 0);
+        
+        int i = 0;
+        while (i < 1) {
+            std::cout << "CurrentLocation: " << currentLocation.x << ", " << currentLocation.y << std::endl;
+            client.Read();
+            pf::Point target;
+            std::cout << "Enter the target coordinates (x y): ";
+            std::cin >> target.x >> target.y;
+
+            std::vector<pf::Point> path = astar(matrix, currentLocation, target);
+
+            path.insert(path.begin(), currentLocation);
+            std::vector<pf::Point> orderlyPath = computeOrderlyPath(path, doorRoomMap, roomInOutMap);
+            orderlyPath.erase(path.begin());
+
+            std::vector<pf::Point> truePath = getTruePath(orderlyPath, currentLocation, matrix, 1);
+            std::cout << "True Path: ";
+            for (const pf::Point& point : truePath) {
+                std::cout << point.toString() << ",";
+            }
+            std::cout << std::endl;
+            
+            for (const pf::Point& point : truePath) {
+                goToPoint(currentLocation, pp, linearSpeed,angularSpeed, point, client);          
+                // Update current location to the point just reached
+                currentLocation = point;
+            }
+            i++;
+            usleep(500000);
+            pp.SetSpeed(0, 0);
         }
-        i++;
-        usleep(500000);
-        pp.SetSpeed(0, 0);
+        pp.SetMotorEnable(false);
+        return 0;
+    } catch (const std::exception& ex) {
+        std::cerr << ex.what() << std::endl;
     }
-    pp.SetMotorEnable(false);
-    return 0;
 }
