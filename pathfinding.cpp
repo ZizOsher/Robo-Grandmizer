@@ -6,6 +6,10 @@
 #include <eigen3/Eigen/Dense>
 #include <queue>
 #include <fstream>
+#include <nlohmann/json.hpp>
+#include <tuple>
+#include "jsonOperations.hpp"
+#include <vector>
 
 // using namespace boost;
 // using namespace std;
@@ -13,8 +17,23 @@ using namespace PlayerCc;
 // using namespace cv;
 namespace pf = Pathfinding;
 
+
 bool pf::Point::operator==(const pf::Point& other) const {
     return x == other.x && y == other.y;
+}
+
+bool pf::Point::operator<(const pf::Point& other) const {
+    return std::tie(x, y) < std::tie(other.x, other.y);
+}
+
+bool pf::Point::operator!=(const pf::Point& other) const {
+    return !(*this == other);
+}
+
+double pf::Point::distance(const Point& other) const {
+    int dx = x - other.x;
+    int dy = y - other.y;
+    return std::sqrt(dx*dx + dy*dy);
 }
 
 pf::Node::Node(Point p, double c, double pr) : point(p), cost(c), priority(pr) {}
@@ -34,10 +53,6 @@ bool pf::ComparePriority::operator()(const pf::Node& a, const pf::Node& b) {
 bool ComparePoints::operator()(const pf::Point& a, const pf::Point& b) const {
     return std::tie(a.x, a.y) < std::tie(b.x, b.y);
 }
-
-// double distance(const Point& a, const Point& b) {
-//     return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2));
-// }
 
 std::vector<pf::Point> getNeighbors(const pf::Point& point, const Eigen::MatrixXd& matrix) {
     std::vector<pf::Point> neighbors;
@@ -148,7 +163,7 @@ std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix,
                 newCost += 10;
             }
 
-            double priority = newCost; // + heuristic(next, target);
+            double priority = newCost;
 
             if (!costSoFar.count(next) || newCost < costSoFar[next]) {
                 costSoFar[next] = newCost;
@@ -203,7 +218,6 @@ bool isPathClear(const Eigen::MatrixXd& matrix,
                     int berth) {
     // This function checks if the straight line path from start to end is clear 
     // and not wider than b pixels, without any point where matrix(y,x) == 1.
-    // Note: This is a simplistic approach and could be optimized.
     int dx = end.x - start.x;
     int dy = end.y - start.y;
 
@@ -214,7 +228,6 @@ bool isPathClear(const Eigen::MatrixXd& matrix,
         int y = static_cast<int>(start.y + t * dy);
 
         // Check the matrix value and width constraint
-        // if (matrix(y, x) == 1 || std::abs(x - start.x) > berth || std::abs(y - start.y) > berth)
         if (matrix(y, x) == 1 ||
             matrix(y+1, x) == 1 ||
             matrix(y, x+1) == 1 ||
@@ -253,4 +266,122 @@ std::vector<pf::Point> getTruePath(const std::vector<pf::Point>& path,
     }
 
     return truePath;
+}
+
+enum class Orientation {
+    COLLINEAR,
+    CLOCKWISE,
+    COUNTERCLOCKWISE
+};
+
+// Helper function to find the orientation of an ordered triplet (p, q, r).
+Orientation orientation(const pf::Point& p,
+                        const pf::Point& q,
+                        const pf::Point& r) {
+    int val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+
+    if (val == 0) return Orientation::COLLINEAR;
+    return (val > 0) ? Orientation::CLOCKWISE : Orientation::COUNTERCLOCKWISE;
+}
+
+// Helper function to check if a point q lies on line segment 'pr'
+bool onSegment(const pf::Point& p,
+                const pf::Point& q,
+                const pf::Point& r) {
+    return q.x <= std::max(p.x, r.x) && q.x >= std::min(p.x, r.x) &&
+           q.y <= std::max(p.y, r.y) && q.y >= std::min(p.y, r.y);
+}
+
+bool doSegmentsIntersect(const pf::Point& p1,
+                            const pf::Point& q1,
+                            const pf::Point& p2,
+                            const pf::Point& q2) {
+    // Find the four orientations
+    Orientation o1 = orientation(p1, q1, p2);
+    Orientation o2 = orientation(p1, q1, q2);
+    Orientation o3 = orientation(p2, q2, p1);
+    Orientation o4 = orientation(p2, q2, q1);
+
+    // General case
+    if (o1 != o2 && o3 != o4) return true;
+
+    // Special cases for collinearity
+    if (o1 == Orientation::COLLINEAR && onSegment(p1, p2, q1)) return true;
+    if (o2 == Orientation::COLLINEAR && onSegment(p1, q2, q1)) return true;
+    if (o3 == Orientation::COLLINEAR && onSegment(p2, p1, q2)) return true;
+    if (o4 == Orientation::COLLINEAR && onSegment(p2, q1, q2)) return true;
+
+    return false; // If none of the conditions are satisfied
+}
+
+bool isInPolygon(const pf::Point& p1, const pf::Point& p2, 
+                 const pf::Point& q1, const pf::Point& q2, 
+                 const pf::Point& r) {
+    // Determine bounds of the rectangle
+    int minX = std::min({p1.x, q1.x, p2.x, q2.x}) - 1;
+    int maxX = std::max({p1.x, q1.x, p2.x, q2.x}) + 1;
+    int minY = std::min({p1.y, q1.y, p2.y, q2.y}) - 1;
+    int maxY = std::max({p1.y, q1.y, p2.y, q2.y}) + 1;
+
+    std::cout << "minX=" << minX << ", maxX=" << maxX << ", minY=" << minY << ", maxY=" << maxY << std::endl;
+    std::cout << "r=" << r.toString() << std::endl;
+    // Check if r is inside the rectangle
+    return r.x >= minX && r.x <= maxX && r.y >= minY && r.y <= maxY;
+}
+
+std::vector<pf::Point> computeOrderlyPath(
+    std::vector<pf::Point>& path, 
+    const std::map<std::tuple<pf::Point, pf::Point>, std::string>& RoomDoorMapping,
+    const std::map<std::string, std::tuple<pf::Point, pf::Point>>& RoomData)
+{
+    std::vector<pf::Point> resPath;
+    size_t i = 0;
+
+    while (i < path.size()) {
+        bool foundInAnyRectangle = false;
+
+        for (const auto& entry : RoomDoorMapping) {
+            const auto& doorSegment = entry.first;
+            const auto& roomTuple = RoomData.at(entry.second);
+
+            if (isInPolygon(std::get<0>(doorSegment), std::get<1>(doorSegment), 
+                            std::get<0>(roomTuple), std::get<1>(roomTuple), path[i])) {
+
+                foundInAnyRectangle = true;
+
+                // Add the current point and the closer point from roomTuple to the result
+                resPath.push_back(path[i]);
+                pf::Point closerPoint = (path[i].distance(std::get<0>(roomTuple)) < path[i].distance(std::get<1>(roomTuple)))
+                                        ? std::get<0>(roomTuple) : std::get<1>(roomTuple);
+                resPath.push_back(closerPoint);
+
+                // Skip the subsequent points which are still in the same rectangle
+                while (i < path.size() && isInPolygon(std::get<0>(doorSegment), std::get<1>(doorSegment),
+                                                      std::get<0>(roomTuple), std::get<1>(roomTuple), path[i])) {
+                    i++;
+                }
+
+                // If we haven't reached the end, add the farther point to resPath
+                if (i < path.size()) {
+                    pf::Point fartherPoint = (closerPoint == std::get<0>(roomTuple)) 
+                                             ? std::get<1>(roomTuple) : std::get<0>(roomTuple);
+                    resPath.push_back(fartherPoint);
+                }
+
+                break;  // Exit the inner loop
+            }
+        }
+
+        if (!foundInAnyRectangle) {
+            resPath.push_back(path[i]);
+            i++;
+        }
+    }
+
+    // Ensure the last element of the path is added
+    if (!resPath.empty() && path.back() != resPath.back()) {
+        resPath.push_back(path.back());
+    }
+
+    return resPath;
 }
