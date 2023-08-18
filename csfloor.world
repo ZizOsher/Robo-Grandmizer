@@ -22,4 +22,6 @@ pioneer2dx
 (
     name "robot"
     pose [-8 -14 0 0]
+    odom_error [0 0 0]
+
 )
