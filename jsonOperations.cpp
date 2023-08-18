@@ -1,6 +1,9 @@
 // jsonOperations.cpp
 
 #include "jsonOperations.hpp"
+#include "pathfinding.hpp"
+using namespace Pathfinding;
+namespace pf = Pathfinding;
 
 RoomData readJsonFile(const std::string& filepath) {
     std::ifstream file(filepath);
@@ -13,8 +16,8 @@ RoomData readJsonFile(const std::string& filepath) {
     return jsonData;
 }
 
-RoomDoorMapping mapDoorsToRooms(const RoomData& data) {
-    RoomDoorMapping mapping;
+std::map<std::tuple<pf::Point, pf::Point>, std::string> mapDoorsToRoomNames(const RoomData& data) {
+    std::map<std::tuple<pf::Point, pf::Point>, std::string> mapping;
     for (const auto& item : data.items()) {
         const auto& roomName = item.key();
         const auto& doorData = item.value()["door"];
@@ -28,7 +31,7 @@ RoomDoorMapping mapDoorsToRooms(const RoomData& data) {
     return mapping;
 }
 
-std::map<std::string, std::tuple<pf::Point, pf::Point>> mapRoomsInOut(const RoomData& data) {
+std::map<std::string, std::tuple<pf::Point, pf::Point>> mapRoomNameToInOut(const RoomData& data) {
     std::map<std::string, std::tuple<pf::Point, pf::Point>> roomPointsMap;
 
     for (const auto& item : data.items()) {

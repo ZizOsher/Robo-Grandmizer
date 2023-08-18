@@ -9,9 +9,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
 #include <tuple>
-
 
 namespace Pathfinding {
 
@@ -39,10 +37,7 @@ namespace Pathfinding {
 } // namespace Pathfinding
 
 namespace pf = Pathfinding;
-using nlohmann::json;
-using RoomData = json;
-using RoomDoorMapping = std::map<std::tuple<pf::Point, pf::Point>, std::string>;
-
+// using nlohmann::json;
 
 struct ComparePoints {
     bool operator()(const pf::Point& a, const pf::Point& b) const;

@@ -6,9 +6,9 @@
 #include <eigen3/Eigen/Dense>
 #include <queue>
 #include <fstream>
-#include <nlohmann/json.hpp>
+// #include <nlohmann/json.hpp>
 #include <tuple>
-#include "jsonOperations.hpp"
+// #include "jsonOperations.hpp"
 #include <vector>
 
 // using namespace boost;
@@ -367,6 +367,7 @@ std::vector<pf::Point> computeOrderlyPath(
 
                 break;  // Exit the inner loop
             }
+            //TODO: Add a check for the case of intersection
         }
 
         if (!foundInAnyRectangle) {
