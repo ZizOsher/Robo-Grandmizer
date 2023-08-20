@@ -72,4 +72,8 @@ namespace measurements {
                                             double world_width) {
         return custom_round(pixel_distance * world_width / image_width * 1000000) / 1000000;
     }
+
+    double calculate_pixel_distance(const pf::Point& a, const pf::Point& b) {
+        return std::sqrt(std::pow(b.x - a.x, 2) + std::pow(b.y - a.y, 2));
+    }
 } // namespace measurements
