@@ -10,12 +10,14 @@
 #include <tuple>
 // #include "jsonOperations.hpp"
 #include <vector>
+#include "measurements.hpp"
 
 // using namespace boost;
 // using namespace std;
 using namespace PlayerCc;
 // using namespace cv;
 namespace pf = Pathfinding;
+// namespace msrmnt = measurements;
 
 
 bool pf::Point::operator==(const pf::Point& other) const {
@@ -42,6 +44,7 @@ std::string pf::Point::toString() const {
         return "(" + std::to_string(x) + ", " + std::to_string(y) + ")";
     }
 
+
 std::string pf::Node::toString() const {
     return "Point: " + point.toString() + ", Cost: " + std::to_string(cost) + ", Priority: " + std::to_string(priority);
 }
@@ -54,24 +57,45 @@ bool ComparePoints::operator()(const pf::Point& a, const pf::Point& b) const {
     return std::tie(a.x, a.y) < std::tie(b.x, b.y);
 }
 
+int countOnesInRadius(const Eigen::MatrixXd& matrix, int y, int x, int radius) {
+    int count = 0;
+
+    // Define the bounds of the 2 cell radius
+    int startY = std::max(0, y - radius);
+    int endY = std::min(matrix.rows() - 1, long(y + radius));
+    int startX = std::max(0, x - radius);
+    int endX = std::min(matrix.cols() - 1, long(x + radius));
+
+    // Loop through the surrounding cells
+    for (int i = startY; i <= endY; ++i) {
+        for (int j = startX; j <= endX; ++j) {
+            if (i == y && j == x) // Skip the center cell itself
+                continue;
+            if (matrix(i, j) == 1) {
+                count++;
+            }
+        }
+    }
+
+    return count;
+}
+
 std::vector<pf::Point> getNeighbors(const pf::Point& point, const Eigen::MatrixXd& matrix) {
     std::vector<pf::Point> neighbors;
     std::vector<pf::Point> possibleMoves = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}}; // Moves in 4 directions: up, down, left, right.
 
     for (const pf::Point& move : possibleMoves) {
         pf::Point next {point.x + move.x, point.y + move.y};
-
-        if (next.x >= 0 && next.x < matrix.cols() && next.y >= 0 && next.y < matrix.rows()) {
-            if (matrix(next.y, next.x) == 0 &&
-                !(
-                    matrix(next.y+1, next.x) == 1 ||
-                    matrix(next.y, next.x+1) == 1 ||
-                    matrix(next.y-1, next.x) == 1 ||
-                    matrix(next.y, next.x-1) == 1 ||
-                    matrix(next.y-1, next.x-1) == 1 ||
-                    matrix(next.y-1, next.x+1) == 1 ||
-                    matrix(next.y+1, next.x-1) == 1 ||
-                    matrix(next.y+1, next.x+1) == 1)
+        if (next.x >= 0 && next.x < matrix.cols() && next.y >= 0 && next.y < matrix.rows() && matrix(next.y, next.x) == 0) {
+            if (!countOnesInRadius(matrix, next.y, next.x, 3) 
+                // !(matrix(next.y+1, next.x) == 1 ||
+                //     matrix(next.y, next.x+1) == 1 ||
+                //     matrix(next.y-1, next.x) == 1 ||
+                //     matrix(next.y, next.x-1) == 1 ||
+                //     matrix(next.y-1, next.x-1) == 1 ||
+                //     matrix(next.y-1, next.x+1) == 1 ||
+                //     matrix(next.y+1, next.x-1) == 1 ||
+                //     matrix(next.y+1, next.x+1) == 1)
                     ) {
                 neighbors.push_back(next);
             }
@@ -98,30 +122,6 @@ std::vector<pf::Point> reconstructPath(const std::map<pf::Point, pf::Point, Comp
 
 double heuristic(pf::Point a, pf::Point b) {
     return std::abs(a.x - b.x) + std::abs(a.y - b.y);
-}
-
-
-int countOnesInRadius(const Eigen::MatrixXd& matrix, int y, int x) {
-    int count = 0;
-
-    // Define the bounds of the 2 cell radius
-    int startY = std::max(0, y - 2);
-    int endY = std::min(matrix.rows() - 1, long(y + 2));
-    int startX = std::max(0, x - 2);
-    int endX = std::min(matrix.cols() - 1, long(x + 2));
-
-    // Loop through the surrounding cells
-    for (int i = startY; i <= endY; ++i) {
-        for (int j = startX; j <= endX; ++j) {
-            if (i == y && j == x) // Skip the center cell itself
-                continue;
-            if (matrix(i, j) == 1) {
-                count++;
-            }
-        }
-    }
-
-    return count;
 }
 
 std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix,
@@ -152,22 +152,23 @@ std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix,
 
         closedList.insert(current.point);  // Mark the current node as processed
 
-        for (const pf::Point& next : getNeighbors(current.point, matrix)) {
-            if (closedList.count(next)) continue;  // Skip processing nodes in the closed list
+        std::vector<pf::Point> neighbors = getNeighbors(current.point, matrix);
 
+        for (const pf::Point& nextPoint : neighbors) {
+            if (closedList.count(nextPoint)) continue;  // Skip processing nodes in the closed list
             double newCost = costSoFar[current.point] + 1; // Assume all movements have the same cost.
-
             //proximity penalty
-            if (countOnesInRadius(matrix, next.y, next.x) > 0) {
-                newCost += 10;
+            std::cout << "newCost: " << newCost << std::endl;
+            if (countOnesInRadius(matrix, nextPoint.y, nextPoint.x, 3) > 0) {
+                newCost += 200;
             }
 
             double priority = newCost;
 
-            if (!costSoFar.count(next) || newCost < costSoFar[next]) {
-                costSoFar[next] = newCost;
-                queue.push(pf::Node {next, newCost, priority});
-                cameFrom[next] = current.point;
+            if (!costSoFar.count(nextPoint) || newCost < costSoFar[nextPoint]) {
+                costSoFar[nextPoint] = newCost;
+                queue.push(pf::Node {nextPoint, newCost, priority});
+                cameFrom[nextPoint] = current.point;
             }
         }
     }
@@ -227,25 +228,29 @@ bool isPathClear(const Eigen::MatrixXd& matrix,
         int y = static_cast<int>(start.y + t * dy);
 
         // Check the matrix value and width constraint
-        if (matrix(y, x) == 1 ||
-            matrix(y+1, x) == 1 ||
-            matrix(y, x+1) == 1 ||
-            matrix(y-1, x) == 1 ||
-            matrix(y, x-1) == 1 ||
-            matrix(y-1, x-1) == 1 ||
-            matrix(y-1, x+1) == 1 ||
-            matrix(y+1, x-1) == 1 ||
-            matrix(y+1, x+1) == 1
-            )
+        if (countOnesInRadius(matrix, y, x, berth) > 0)
             return false;
     }
     return true;
 }
 
+bool tupleExistsInMap(const pf::Point& p1, const pf::Point& p2,
+                      const std::map<std::string, std::tuple<pf::Point, pf::Point>>& m) {
+    std::tuple<pf::Point, pf::Point> target1 = std::make_tuple(p1, p2);
+    std::tuple<pf::Point, pf::Point> target2 = std::make_tuple(p2, p1);
+
+    for (const auto& [key, value] : m) {
+        if (value == target1 || value == target2) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<pf::Point> getTruePath(const std::vector<pf::Point>& path,
-                                        pf::Point start,
-                                        const Eigen::MatrixXd& matrix,
-                                        int b) {
+                                    pf::Point start,
+                                    const Eigen::MatrixXd& matrix,
+                                    int b) {
     std::vector<pf::Point> truePath;
     pf::Point currentPoint = start;
     size_t i = 0;
@@ -338,34 +343,42 @@ std::vector<pf::Point> computeOrderlyPath(
         bool foundInAnyRectangle = false;
 
         for (const auto& entry : RoomDoorMapping) {
+            if (entry.second == "330") continue;
             const auto& doorSegment = entry.first;
-            const auto& roomTuple = RoomData.at(entry.second);
+            const auto& roomInOut = RoomData.at(entry.second);
+
+            if (path[i] == std::get<0>(roomInOut) || path[i] == std::get<1>(roomInOut)) {
+                resPath.push_back(path[i]);
+                i++;
+                foundInAnyRectangle = true;
+                break;
+            }
 
             if (isInPolygon(std::get<0>(doorSegment), std::get<1>(doorSegment), 
-                            std::get<0>(roomTuple), std::get<1>(roomTuple), path[i])) {
+                            std::get<0>(roomInOut), std::get<1>(roomInOut), path[i])) {
 
                 foundInAnyRectangle = true;
 
-                // Add the current point and the closer point from roomTuple to the result
+                // Add the current point and the closer point from roomInOut to the result
                 resPath.push_back(path[i]);
-                pf::Point closerPoint = (path[i].distance(std::get<0>(roomTuple)) < path[i].distance(std::get<1>(roomTuple)))
-                                        ? std::get<0>(roomTuple) : std::get<1>(roomTuple);
+                pf::Point closerPoint = (path[i].distance(std::get<0>(roomInOut)) < path[i].distance(std::get<1>(roomInOut)))
+                                        ? std::get<0>(roomInOut) : std::get<1>(roomInOut);
                 resPath.push_back(closerPoint);
 
                 // Skip the subsequent points which are still in the same rectangle
                 while (i < path.size() && isInPolygon(std::get<0>(doorSegment), std::get<1>(doorSegment),
-                                                      std::get<0>(roomTuple), std::get<1>(roomTuple), path[i])) {
+                                                      std::get<0>(roomInOut), std::get<1>(roomInOut), path[i])) {
                     i++;
                 }
 
                 // If we haven't reached the end, add the farther point to resPath
                 if (i < path.size()) {
-                    pf::Point fartherPoint = (closerPoint == std::get<0>(roomTuple)) 
-                                             ? std::get<1>(roomTuple) : std::get<0>(roomTuple);
+                    pf::Point fartherPoint = (closerPoint == std::get<0>(roomInOut)) 
+                                             ? std::get<1>(roomInOut) : std::get<0>(roomInOut);
                     resPath.push_back(fartherPoint);
                 }
 
-                break;  // Exit the inner loop
+                break;
             }
             //TODO: Add a check for the case of intersection
         }
@@ -380,6 +393,6 @@ std::vector<pf::Point> computeOrderlyPath(
     if (!resPath.empty() && path.back() != resPath.back()) {
         resPath.push_back(path.back());
     }
-
+    
     return resPath;
 }

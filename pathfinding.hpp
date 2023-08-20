@@ -44,9 +44,9 @@ struct ComparePoints {
 };
 
 // double distance(const pf::Point& a, const pf::Point& b);
+int countOnesInRadius(const Eigen::MatrixXd& matrix, int y, int x, int radius);
 std::vector<pf::Point> reconstructPath(const std::map<pf::Point, pf::Point, ComparePoints>& cameFrom, const pf::Point& current);
 std::vector<pf::Point> getNeighbors(const pf::Point& point, const Eigen::MatrixXd& matrix);
-int countOnesInRadius(const Eigen::MatrixXd& matrix, int y, int x);
 std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix, const pf::Point& start, const pf::Point& target);
 Eigen::MatrixXd loadMatrix(const std::string& filename);
 bool isPathClear(const Eigen::MatrixXd& matrix, const pf::Point& start, const pf::Point& end, int b);
@@ -54,8 +54,8 @@ std::vector<pf::Point> getTruePath(const std::vector<pf::Point>& path, pf::Point
 
 std::vector<pf::Point> computeOrderlyPath(
     std::vector<pf::Point>& path, 
-    const std::map<std::tuple<pf::Point, pf::Point>, std::string>& RoomDoorMapping,
-    const std::map<std::string, std::tuple<pf::Point, pf::Point>>& RoomData);
+                                            const std::map<std::tuple<pf::Point, pf::Point>, std::string>& RoomDoorMapping,
+                                            const std::map<std::string, std::tuple<pf::Point, pf::Point>>& RoomData);
 
 bool doSegmentsIntersect(const pf::Point& p1, const pf::Point& q1, const pf::Point& p2, const pf::Point& q2);
 bool onSegment(const pf::Point& p, const pf::Point& q, const pf::Point& r);
