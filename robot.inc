@@ -12,6 +12,9 @@ define pioneer2dx model
     (
         localization "odom"
         localization_origin [-8 -14 0 0]
+        # report error-free position in world coordinates
+        # localization "gps"
+        # localization_origin [ -8 -14 0 0 ]
     )
 
     # Add a laser range finder

@@ -10,5 +10,6 @@ define floorplan model
     gui_outline 0
     fiducial_return 1
     gripper_return 0
+    ranger_return 1
 )
 
