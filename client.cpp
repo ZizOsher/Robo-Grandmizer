@@ -8,11 +8,12 @@
 #include <algorithm>
 #include <map>
 #include <numeric>
-#include <list>
 #include <nlohmann/json.hpp>
 #include "pathfinding.hpp"
 #include "measurements.hpp"
 #include "jsonOperations.hpp"
+#include "mcl.hpp"
+#include <unordered_set>
 
 using namespace boost;
 using namespace PlayerCc;
@@ -21,16 +22,29 @@ using namespace Pathfinding;
 namespace pf = Pathfinding;
 namespace msrmnt = measurements;
 
+std::string findRoomNameByPoint(const std::map<std::string, std::tuple<pf::Point, pf::Point>>& roomMap, const pf::Point& target) {
+    for (const auto& entry : roomMap) {
+        const auto& inPoint = std::get<0>(entry.second);
+        const auto& outPoint = std::get<1>(entry.second);
+
+        if (inPoint == target || outPoint == target) {
+            return entry.first;
+        }
+    }
+
+    return "";  // Return an empty string if not found.
+}
+
 std::vector<pf::Point> getPath(const Eigen::MatrixXd& matrix, 
-                                const pf::Point& start, 
-                                const pf::Point& target, 
+                                const pf::Point& start,
+                                const pf::Point& target,
                                 const std::map<std::tuple<pf::Point, pf::Point>, std::string>& RoomDoorMapping,
                                 const std::map<std::string, std::tuple<pf::Point, pf::Point>>& roomNameToInOut) {
     std::vector<pf::Point> path = astar(matrix, start, target);
     path.insert(path.begin(), start);
     std::vector<pf::Point> orderlyPath = computeOrderlyPath(path, RoomDoorMapping, roomNameToInOut);
     orderlyPath.erase(orderlyPath.begin());
-    std::vector<pf::Point> truePath = getTruePath(orderlyPath, start, matrix, 1);
+    std::vector<pf::Point> truePath = getTruePath(orderlyPath, start, matrix, 3);
     return truePath;
 }
 
@@ -50,18 +64,14 @@ double estimateTime(const std::vector<pf::Point>& truePath,
                     double angularSpeed,
                     const pf::Point& startingLocation) {
     double totalTime = 0.0;
-
-    // Current location starts from the starting location.
     pf::Point currentLocation = startingLocation;
 
     for (int i=0; i<truePath.size() -1; i++) {
-        // std::cout << "True Path: " << truePath[i].toString() << std::endl;
+        // Calculating difference in x and y
         double currentWorldX = msrmnt::pixel_to_world_x(currentLocation.x);
         double currentWorldY = msrmnt::pixel_to_world_y(currentLocation.y);
         double targetWorldX = msrmnt::pixel_to_world_x(truePath[i].x);
         double targetWorldY = msrmnt::pixel_to_world_y(truePath[i].y);
-
-        // Calculating difference in x and y
         double dx = targetWorldX - currentWorldX;
         double dy = targetWorldY - currentWorldY;
 
@@ -75,14 +85,19 @@ double estimateTime(const std::vector<pf::Point>& truePath,
         double distanceToTarget = sqrt(dx*dx + dy*dy);
         totalTime += distanceToTarget / linearSpeed;
 
-        // Update the current location for the next iteration.
         currentLocation = truePath[i];
     }
     return totalTime;
 }
 
+struct RoundTrip {
+    std::vector<pf::Point> path;
+    std::vector<double> segmentTimes;
+    double totalTime;
+};
+
 // Compute the round trip based on time estimation as the distance metric.
-std::vector<pf::Point> computeRoundTrip(const pf::Point& start,
+RoundTrip computeRoundTrip(const pf::Point& start,
                                         const std::vector<pf::Point>& destinations,
                                         const Eigen::MatrixXd& matrix,
                                         const std::map<std::tuple<pf::Point, pf::Point>, std::string>& doorToRoomName,
@@ -91,6 +106,9 @@ std::vector<pf::Point> computeRoundTrip(const pf::Point& start,
                                         double angularSpeed) {
     std::vector<pf::Point> unvisited = destinations;
     std::vector<pf::Point> result;
+    std::vector<double> segmentTimes;
+    double time = 0.0;
+    
     pf::Point current = start;
 
     while (!unvisited.empty()) {
@@ -98,14 +116,21 @@ std::vector<pf::Point> computeRoundTrip(const pf::Point& start,
         pf::Point closestPoint;
         if (unvisited.size() == 1) {
             closestPoint = unvisited[0];
+            std::vector<pf::Point> path = getPath(matrix, current, closestPoint, doorToRoomName, roomNameToInOut);
+            double estimatedTime = estimateTime(path, linearSpeed, angularSpeed, current);
+            segmentTimes.push_back(estimatedTime);
+            time += estimatedTime;
             result.push_back(closestPoint);
+            path = getPath(matrix, closestPoint, start, doorToRoomName, roomNameToInOut);
+            estimatedTime = estimateTime(path, linearSpeed, angularSpeed, current);
+            segmentTimes.push_back(estimatedTime);
+            time += estimatedTime;
             result.push_back(start);
             break;
         } else {
             for (const pf::Point& next : unvisited) {
-                // Compute the path from the current to next.
+                // Compute the path and estimate the time to travel the path.
                 std::vector<pf::Point> path = getPath(matrix, current, next, doorToRoomName, roomNameToInOut);
-                // Estimate the time to travel the path.
                 double estimatedTime = estimateTime(path, linearSpeed, angularSpeed, current);
                 if (estimatedTime < shortestTime) {
                     shortestTime = estimatedTime;
@@ -114,30 +139,30 @@ std::vector<pf::Point> computeRoundTrip(const pf::Point& start,
             }
         }
         result.push_back(closestPoint);
+        segmentTimes.push_back(shortestTime);
+        time += shortestTime;
         unvisited.erase(std::remove(unvisited.begin(), unvisited.end(), closestPoint), unvisited.end());
         current = closestPoint;
     }
-    return result;
+    return {result, segmentTimes, time};
 }
 
 bool adjustYaw(PlayerCc::Position2dProxy& pp, 
                const pf::Point& currentLocation, 
                const pf::Point& target, 
-               PlayerClient& client, 
+               PlayerClient& robot, 
                double angularSpeed) {
     double currentWorldX = msrmnt::pixel_to_world_x(currentLocation.x);
     double currentWorldY = msrmnt::pixel_to_world_y(currentLocation.y);
     double targetWorldX = msrmnt::pixel_to_world_x(target.x);
     double targetWorldY = msrmnt::pixel_to_world_y(target.y);
-
-    // Calculating difference in x and y
     double dx = targetWorldX - currentWorldX;
     double dy = targetWorldY - currentWorldY;
 
     double requiredYaw = normalizeAngle(atan2(dy, dx)); // In radians
     double currentYaw;
     do {
-        client.Read();
+        robot.Read();
         currentYaw = pp.GetYaw();
         double yawError = normalizeAngle(requiredYaw - currentYaw);
         // Set angular speed based on the error
@@ -156,13 +181,12 @@ bool goToPoint(pf::Point& currentLocation,
                 double linearSpeed,
                 double angularSpeed,
                 const pf::Point& target,
-                PlayerClient& client) {
+                PlayerClient& robot
+                ) {
     double currentWorldX = msrmnt::pixel_to_world_x(currentLocation.x);
     double currentWorldY = msrmnt::pixel_to_world_y(currentLocation.y);
     double targetWorldX = msrmnt::pixel_to_world_x(target.x);
     double targetWorldY = msrmnt::pixel_to_world_y(target.y);
-
-    // Calculating difference in x and y
     double dx = targetWorldX - currentWorldX;
     double dy = targetWorldY - currentWorldY;
 
@@ -172,16 +196,21 @@ bool goToPoint(pf::Point& currentLocation,
     // Step 2: Rotate the Robot to the Required Yaw Angle
     double currentYaw;
     do {
-        client.Read();
+        robot.Read();
         currentYaw = pp.GetYaw();
         double yawError = normalizeAngle(requiredYaw - currentYaw);
-        
         // Set angular speed based on the error
         if (fabs(yawError) > 0.01) {
             pp.SetSpeed(0, ((yawError > 0) ? angularSpeed : (-1) * angularSpeed));
         }
-        usleep(timeToTurnInMicroseconds(std::abs(yawError), angularSpeed));
-    } while(fabs(normalizeAngle(requiredYaw - currentYaw)) > 0.01);
+
+        double turningTimeMs = timeToTurnInMicroseconds(std::abs(yawError), angularSpeed);
+        double iterTimeMs = turningTimeMs;
+        double iterTimeS = iterTimeMs / 1000000.0;  // Convert microseconds to seconds
+ 
+        // mcl.motionUpdate(0, 0, angularSpeed * iterTimeS, 0.1);
+        usleep(iterTimeMs);
+    } while(fabs(normalizeAngle(requiredYaw - currentYaw)) > 0.005);
     
     pp.SetSpeed(0, 0);
     
@@ -191,7 +220,18 @@ bool goToPoint(pf::Point& currentLocation,
     double minDistanceToTarget = std::numeric_limits<double>::max(); // Initialized with a large value
 
     do {
-        client.Read();
+        robot.Read();
+
+        //Computations for mcl
+        // std::vector<double> measurements;
+        // for (int i = 0; i < rp.GetRangeCount(); i++) {
+        //     measurements.push_back(rp[i]);
+        // }
+        // mcl.measurementUpdate(measurements);
+        // mcl.resampleParticles();
+
+        // Estimate position using MCL
+        // Particle estimatedPosition = mcl.getBestParticle();
 
         currentWorldX = pp.GetXPos();
         currentWorldY = pp.GetYPos();
@@ -203,40 +243,103 @@ bool goToPoint(pf::Point& currentLocation,
         distanceToTarget = sqrt(dx*dx + dy*dy);
         pixelDistance = msrmnt::world_distance_to_pixel_distance(distanceToTarget);
 
-        if ((distanceToTarget - minDistanceToTarget) > 0.5) {
+        // double estimatedDistanceToTarget = sqrt(pow(target.x - estimatedPosition.x, 2) + pow(target.y - estimatedPosition.y, 2));
+
+        // std::cout << "distanceToTarget: " << distanceToTarget << std::endl;
+        // std::cout << "estimatedDistanceToTarget: " << estimatedDistanceToTarget << std::endl;
+
+        currentYaw = pp.GetYaw();
+        double yawError = normalizeAngle(requiredYaw - currentYaw);
+        // Set angular speed based on the error
+        if (fabs(yawError) > 0.015) {
+            std::cout << "Need to fix yaw. Yaw error: " << yawError << std::endl;
             pp.SetSpeed(0, 0);
             return false;
         }
 
-        if (pixelDistance > 1 || distanceToTarget > 0.5) {
+        if ((distanceToTarget - minDistanceToTarget) > 0.5 || false /* check if disired yaw has changed */ ) {
+            // fabs(distanceToTarget - estimatedDistanceToTarget) > 0.5) {
+            pp.SetSpeed(0, 0);
+            return false;
+        }
+
+        if (pixelDistance > 1 || distanceToTarget > 0.2) {
             pp.SetSpeed(linearSpeed, 0);
         }
-    
-        double timeRequired = distanceToTarget / linearSpeed; // This gives time in seconds
-        int sleepDuration = static_cast<int>(timeRequired * 1000000);  // Convert to microseconds
-        usleep(sleepDuration/10000);
 
+        double drivingTimeMs = (distanceToTarget / linearSpeed) * 1000000; // This gives time in seconds
+        double sleepTimeMs = drivingTimeMs / 50000.0; 
+        double sleepTimeS = drivingTimeMs / 1000000.0;
+        
+        // mcl.motionUpdate(linearSpeed * sleepTimeS, 0, 0, 0.1);
+        usleep(sleepTimeMs);
         minDistanceToTarget = (distanceToTarget < minDistanceToTarget) ? distanceToTarget : minDistanceToTarget;
 
-    } while(pixelDistance > 1 || distanceToTarget > 0.5);
+    } while(pixelDistance > 1 || distanceToTarget > 0.2);
     
     // Step 4: Stop the Robot
     pp.SetSpeed(0, 0);
     return true;
 }
 
+void leaveRoom(pf::Point currentLocation,
+                std::string roomName,
+                std::map<std::tuple<Pathfinding::Point, Pathfinding::Point>, std::string> doorToRoomName,
+                const std::map<std::string, std::tuple<pf::Point, pf::Point>>& roomNameToInOut,
+                PlayerCc::Position2dProxy& pp,
+                PlayerClient& robot,
+                double linearSpeed,
+                double angularSpeed,
+                const Eigen::MatrixXd& matrix) {
+    std::cout << "Leaving room: " << roomName << std::endl;
+    std::cout << "..." << std::endl;
+    pf::Point roomIn = std::get<0>(roomNameToInOut.at(roomName));
+    pf::Point roomOut = std::get<1>(roomNameToInOut.at(roomName));
+
+    if (currentLocation != roomIn) {
+        std::vector<pf::Point> path = getPath(matrix,
+                                                currentLocation,
+                                                roomIn,
+                                                doorToRoomName,
+                                                roomNameToInOut);
+        int j = 0;
+        while (j < path.size()) {
+            bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, path[j], robot);
+            if (success) {
+                std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
+                j++;
+            }
+        }
+    }
+    std::cout << "Oh boy! I sure am happy a door hasn't been installed yet!" << std::endl;
+    std::cout << "If it had been installed, I would have played a pre-recorded message like:" << std::endl << std::endl;
+    std::cout << '"' << "Please open the door, I'm a simple robot and I want to leave the room!" << '"' << std::endl << std::endl;
+    std::cout << "Then I would have waited for the door to open and only then would have left the room." << std::endl;
+    sleep(5);
+    std::cout << "Now exiting room " << roomName << std::endl;
+    bool success = false;
+    while (!success) {
+        bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, roomOut, robot);
+        if (success) {
+            std::cout << "Reached the intermediate point: " << roomOut.toString() << std::endl;
+            break;
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
     try {
-        double linearSpeed = argv[1] ? std::stod(argv[1]) : 3.0;
-        double angularSpeed = !argv[2] ? std::stod(argv[2]) : 1.0;
+        double linearSpeed = 0.3;
+        double angularSpeed = 0.1;
 
         // Administrative code: json parsing, matrix loading, player/stage proxy initialization, etc...
         auto jsonData = readJsonFile("../csfloor_mapping.json");
         std::map<std::tuple<pf::Point, pf::Point>, std::string> doorToRoomName = mapDoorsToRoomNames(jsonData);      
         std::map<std::string, std::tuple<pf::Point, pf::Point>> roomNameToInOut = mapRoomNameToInOut(jsonData);
         Eigen::MatrixXd matrix = loadMatrix("../binary_image.txt");
-        PlayerClient client("localhost");
-        Position2dProxy pp(&client, 0);
+        PlayerClient robot("localhost");
+        Position2dProxy pp(&robot, 0);
+        RangerProxy rp(&robot, 0);
 
         // Administrative code: setting up the robot
         pp.SetMotorEnable(true);
@@ -244,9 +347,9 @@ int main(int argc, char *argv[]) {
         double currentWorldX = msrmnt::pixel_to_world_x(currentLocation.x);
         double currentWorldY = msrmnt::pixel_to_world_y(currentLocation.y);
         pp.SetOdometry(currentWorldX, currentWorldY, 0);
-        
+
         std::cout << "CurrentLocation: " << currentLocation.x << ", " << currentLocation.y << std::endl;
-        client.Read();      
+        robot.Read();      
         std::string room1;
         std::string room2;
         std::string room3;
@@ -254,36 +357,76 @@ int main(int argc, char *argv[]) {
         std::cout << "Enter the three faculty rooms you want visit: ";
         std::cin >> room1 >> room2 >> room3;
         
-        pf::Point dest_1 = std::get<1>(roomNameToInOut[room1]);
-        pf::Point dest_2 = std::get<1>(roomNameToInOut[room2]);
-        pf::Point dest_3 = std::get<1>(roomNameToInOut[room3]);
-        std::vector<pf::Point> waypoints = {dest_1, dest_2, dest_3};
+        pf::Point dest_1 = (roomNameToInOut.find(room1) != roomNameToInOut.end()) ? std::get<1>(roomNameToInOut[room1]) : pf::Point{0, 0};
+        pf::Point dest_2 = (roomNameToInOut.find(room2) != roomNameToInOut.end()) ? std::get<1>(roomNameToInOut[room2]) : pf::Point{0, 0};
+        pf::Point dest_3 = (roomNameToInOut.find(room3) != roomNameToInOut.end()) ? std::get<1>(roomNameToInOut[room3]) : pf::Point{0, 0};
 
-        for (int i = 0; i < waypoints.size(); i++) {
-            std::cout << "Waypoint " << i << ": " << waypoints[i].toString() << ", ";
+        // Removing duplicates and pruning waypoints
+        std::vector<pf::Point> waypoints = {dest_1, dest_2, dest_3};
+        std::sort(waypoints.begin(), waypoints.end());
+        waypoints.erase(std::unique(waypoints.begin(), waypoints.end()), waypoints.end());
+        waypoints.erase(std::remove(waypoints.begin(), waypoints.end(), pf::Point{0,0}), waypoints.end());
+
+        if (waypoints.empty()) {
+            std::cout << "No valid waypoints entered. Exiting..." << std::endl;
+            return 0;
         }
-        std::cout << std::endl;
 
         // Estimate and sort waypoints using computeRoundTrip
-        std::vector<pf::Point> sortedWaypoints = computeRoundTrip(currentLocation, waypoints, matrix, doorToRoomName, roomNameToInOut, linearSpeed, angularSpeed);
+        RoundTrip roundTrip = computeRoundTrip(currentLocation,
+                                               waypoints,
+                                               matrix,
+                                               doorToRoomName,
+                                               roomNameToInOut,
+                                               linearSpeed,
+                                               angularSpeed);
         
-        std::cout << "Sorted Waypoints: " << std::endl;
-        for (int i = 0; i < sortedWaypoints.size(); i++) {
-            std::cout << "Waypoint " << i << ": " << sortedWaypoints[i].toString() << ", ";
-        }
+        
+        std::vector<pf::Point> roundTripPath = roundTrip.path;
+        roundTripPath.back() = std::get<1>(roomNameToInOut["327"]);
+        std::vector<double> segmentTimes = roundTrip.segmentTimes;
+        double totalTime = roundTrip.totalTime;
 
-        // Assume a round trip time
-        double roundTripTime = 700;  // seconds
-        double waypointTime = 20;    // seconds per waypoint
-        // Add extra time for all the waypoints
-        roundTripTime += waypoints.size() * waypointTime;
+        double waypointTime = 35;    // aproximate seconds spent at each waypoint
+        totalTime += waypoints.size() * waypointTime;
         
-        std::cout << "Before Loop." << std::endl;
-        for (int i = 0; i < sortedWaypoints.size(); i++) {
+        // std::cout << "Round trip times: " << std::endl;
+        // for (int i = 0; i < segmentTimes.size(); i++) {
+        //     std::cout << "Segment " << i << ": " << segmentTimes[i] << " seconds" << std::endl;
+        // }
+        // std::cout << "Total time: " << totalTime << " seconds" << std::endl;
+
+        std::cout << "Round trip room order: " << std::endl;
+        for (int i = 0; i < roundTripPath.size() - 1; i++) {
+            std::cout << "room: " << findRoomNameByPoint(roomNameToInOut, roundTripPath[i]) << ", ";
+        }
+        std::cout << "and back to room: 330" << std::endl;
+
+        // Leaving the Robotics lab
+
+        std::string currentRoom = "330";
+        leaveRoom(currentLocation,
+                    currentRoom,
+                    doorToRoomName,
+                    roomNameToInOut,
+                    pp,
+                    robot,
+                    linearSpeed,
+                    angularSpeed,
+                    matrix);
+
+        // currentLocation = std::get<1>(roomNameToInOut[currentRoom]);
+        // std::cout << "CurrentLocation: " << currentLocation.x << ", " << currentLocation.y << std::endl;
+        std::cout << "CurrentLocation: " << std::get<1>(roomNameToInOut[currentRoom]).toString() << std::endl;
+        std::cout << "Current Location based on odometry: " << msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos()).toString() << std::endl;
+        currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
+        currentRoom = "hallway";
+        
+        for (int i = 0; i < roundTripPath.size(); i++) {
             // Compute the path to the next waypoint
-            std::vector<pf::Point> path = getPath(matrix, currentLocation, sortedWaypoints[i], doorToRoomName, roomNameToInOut);
+            std::vector<pf::Point> path = getPath(matrix, currentLocation, roundTripPath[i], doorToRoomName, roomNameToInOut);
             
-            std::cout << "Path to waypoint: " << sortedWaypoints[i].toString() << std::endl;
+            std::cout << "Path to waypoint: " << roundTripPath[i].toString() << std::endl;
             for (int j = 0; j < path.size(); j++) {
                 std::cout << path[j].toString() << ", ";
             }
@@ -293,9 +436,9 @@ int main(int argc, char *argv[]) {
             // Drive using goToPoint
             int j = 0;
             while (j < path.size()) {
-                bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, path[j], client);
+                bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, path[j], robot);
                 if (success) {
-                    std::cout << "Reached the target point: " << path[j].toString() << std::endl;
+                    std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
                     j++;
                 }
             }
@@ -303,10 +446,10 @@ int main(int argc, char *argv[]) {
             int time_taken = time_after_waypoint - time_before_waypoint;
             
             // Invoke the door behavior
-            std::cout << "Arrived at waypoint: " << sortedWaypoints[i].toString() << " in " << time_taken << " seconds" << std::endl;
+            std::cout << "Arrived at waypoint: " << roundTripPath[i].toString() << " in " << time_taken << " seconds" << std::endl;
             std::cout << "Here be door behavior" << std::endl;
             
-            currentLocation = sortedWaypoints[i];
+            currentLocation = roundTripPath[i];
         }
         // After all waypoints have been reached and we're back at the starting location
         std::cout << "Now that we're all here, we can party!" << std::endl;
@@ -315,6 +458,7 @@ int main(int argc, char *argv[]) {
         pp.SetMotorEnable(false);
         return 0;
     } catch (const std::exception& ex) {
+        std::cout << "Exception: " << ex.what() << std::endl;
         std::cerr << ex.what() << std::endl;
     }
 }
