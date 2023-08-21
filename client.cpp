@@ -44,7 +44,7 @@ std::vector<pf::Point> getPath(const Eigen::MatrixXd& matrix,
     path.insert(path.begin(), start);
     std::vector<pf::Point> orderlyPath = computeOrderlyPath(path, RoomDoorMapping, roomNameToInOut);
     orderlyPath.erase(orderlyPath.begin());
-    std::vector<pf::Point> truePath = getTruePath(orderlyPath, start, matrix, 3);
+    std::vector<pf::Point> truePath = getTruePath(orderlyPath, start, matrix, 4);
     return truePath;
 }
 
@@ -200,7 +200,7 @@ bool goToPoint(pf::Point& currentLocation,
         currentYaw = pp.GetYaw();
         double yawError = normalizeAngle(requiredYaw - currentYaw);
         // Set angular speed based on the error
-        if (fabs(yawError) > 0.01) {
+        if (fabs(yawError) > 0.009) {
             pp.SetSpeed(0, ((yawError > 0) ? angularSpeed : (-1) * angularSpeed));
         }
 
@@ -251,14 +251,12 @@ bool goToPoint(pf::Point& currentLocation,
         currentYaw = pp.GetYaw();
         double yawError = normalizeAngle(requiredYaw - currentYaw);
         // Set angular speed based on the error
-        if (fabs(yawError) > 0.015) {
-            std::cout << "Need to fix yaw. Yaw error: " << yawError << std::endl;
+        if (fabs(yawError) > 0.009) {
             pp.SetSpeed(0, 0);
             return false;
         }
 
-        if ((distanceToTarget - minDistanceToTarget) > 0.5 || false /* check if disired yaw has changed */ ) {
-            // fabs(distanceToTarget - estimatedDistanceToTarget) > 0.5) {
+        if ((distanceToTarget - minDistanceToTarget) > 0.3) {
             pp.SetSpeed(0, 0);
             return false;
         }
@@ -330,7 +328,7 @@ void leaveRoom(pf::Point currentLocation,
 int main(int argc, char *argv[]) {
     try {
         double linearSpeed = 0.3;
-        double angularSpeed = 0.1;
+        double angularSpeed = 0.09;
 
         // Administrative code: json parsing, matrix loading, player/stage proxy initialization, etc...
         auto jsonData = readJsonFile("../csfloor_mapping.json");
@@ -441,6 +439,7 @@ int main(int argc, char *argv[]) {
                     std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
                     j++;
                 }
+                currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
             }
             int time_after_waypoint = time(NULL);
             int time_taken = time_after_waypoint - time_before_waypoint;

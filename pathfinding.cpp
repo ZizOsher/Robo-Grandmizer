@@ -6,19 +6,12 @@
 #include <eigen3/Eigen/Dense>
 #include <queue>
 #include <fstream>
-// #include <nlohmann/json.hpp>
 #include <tuple>
-// #include "jsonOperations.hpp"
 #include <vector>
 #include "measurements.hpp"
 
-// using namespace boost;
-// using namespace std;
 using namespace PlayerCc;
-// using namespace cv;
 namespace pf = Pathfinding;
-// namespace msrmnt = measurements;
-
 
 bool pf::Point::operator==(const pf::Point& other) const {
     return x == other.x && y == other.y;
@@ -87,16 +80,7 @@ std::vector<pf::Point> getNeighbors(const pf::Point& point, const Eigen::MatrixX
     for (const pf::Point& move : possibleMoves) {
         pf::Point next {point.x + move.x, point.y + move.y};
         if (next.x >= 0 && next.x < matrix.cols() && next.y >= 0 && next.y < matrix.rows() && matrix(next.y, next.x) == 0) {
-            if (!countOnesInRadius(matrix, next.y, next.x, 3) 
-                // !(matrix(next.y+1, next.x) == 1 ||
-                //     matrix(next.y, next.x+1) == 1 ||
-                //     matrix(next.y-1, next.x) == 1 ||
-                //     matrix(next.y, next.x-1) == 1 ||
-                //     matrix(next.y-1, next.x-1) == 1 ||
-                //     matrix(next.y-1, next.x+1) == 1 ||
-                //     matrix(next.y+1, next.x-1) == 1 ||
-                //     matrix(next.y+1, next.x+1) == 1)
-                    ) {
+            if (!countOnesInRadius(matrix, next.y, next.x, 3)) {
                 neighbors.push_back(next);
             }
         }
@@ -157,11 +141,9 @@ std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix,
         for (const pf::Point& nextPoint : neighbors) {
             if (closedList.count(nextPoint)) continue;  // Skip processing nodes in the closed list
             double newCost = costSoFar[current.point] + 1; // Assume all movements have the same cost.
-            //proximity penalty
-            std::cout << "newCost: " << newCost << std::endl;
-            if (countOnesInRadius(matrix, nextPoint.y, nextPoint.x, 3) > 0) {
-                newCost += 200;
-            }
+            // proximity penalty
+            int onesInRadius = countOnesInRadius(matrix, nextPoint.y, nextPoint.x, 4);
+            newCost += onesInRadius * 100;
 
             double priority = newCost;
 
@@ -318,6 +300,25 @@ bool doSegmentsIntersect(const pf::Point& p1,
     return false; // If none of the conditions are satisfied
 }
 
+bool doesLineIntersectWithSegment(const pf::Point& p1,
+                                  const pf::Point& p2,
+                                  const pf::Point& q1,
+                                  const pf::Point& q2) {
+    // Check orientations of q1 and q2 with respect to the line defined by p1 and p2
+    Orientation o1 = orientation(p1, p2, q1);
+    Orientation o2 = orientation(p1, p2, q2);
+    
+    // If q1 and q2 have different orientations with respect to line p1-p2, they lie on different sides of the line.
+    if (o1 != o2) return true;
+
+    // Check for the special case where one of the segment's endpoints lies on the line
+    if (o1 == Orientation::COLLINEAR && onSegment(p1, q1, p2)) return true;
+    if (o2 == Orientation::COLLINEAR && onSegment(p1, q2, p2)) return true;
+
+    return false; // If none of the conditions are satisfied
+}
+
+
 bool isInPolygon(const pf::Point& p1, const pf::Point& p2, 
                  const pf::Point& q1, const pf::Point& q2, 
                  const pf::Point& r) {
@@ -357,6 +358,19 @@ std::vector<pf::Point> computeOrderlyPath(
             if (isInPolygon(std::get<0>(doorSegment), std::get<1>(doorSegment), 
                             std::get<0>(roomInOut), std::get<1>(roomInOut), path[i])) {
 
+                // if the segment connecting the previous point to path[i] does not intersect with the door segment
+                // and the segment connecting path[i] and std::get<1>(roomInOut) does not intersect with the door segment
+                // The robot is outside the room and does not need to go through the door
+                // all we need to do is add the current point to the result and move on to the next point (continue)
+                if (i>0) {
+                    if (!doSegmentsIntersect(path[i-1], path[i], std::get<0>(doorSegment), std::get<1>(doorSegment)) &&
+                        !doSegmentsIntersect(path[i], std::get<1>(roomInOut), std::get<0>(doorSegment), std::get<1>(doorSegment))) {
+                        resPath.push_back(path[i]);
+                        i++;
+                        foundInAnyRectangle = true;
+                        break;
+                    }
+                }
                 foundInAnyRectangle = true;
 
                 // Add the current point and the closer point from roomInOut to the result
