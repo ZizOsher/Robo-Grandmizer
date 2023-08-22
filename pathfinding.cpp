@@ -80,7 +80,7 @@ std::vector<pf::Point> getNeighbors(const pf::Point& point, const Eigen::MatrixX
     for (const pf::Point& move : possibleMoves) {
         pf::Point next {point.x + move.x, point.y + move.y};
         if (next.x >= 0 && next.x < matrix.cols() && next.y >= 0 && next.y < matrix.rows() && matrix(next.y, next.x) == 0) {
-            if (!countOnesInRadius(matrix, next.y, next.x, 3)) {
+            if (!countOnesInRadius(matrix, next.y, next.x, 2)) {
                 neighbors.push_back(next);
             }
         }
