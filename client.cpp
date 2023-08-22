@@ -156,7 +156,7 @@ void AvoidObstacles(double *linearSpeed,
     const double safe_distance = 0.5;  // robot keeps at least 50cm from obstacles
     const double side_threshold = 0.4;  // distance from side walls we want to avoid
     const double max_linear_speed = 0.3;
-    const double max_angular_speed = 0.15;
+    const double max_angular_speed = 0.1;
 
     // Check quadrants for obstacles
     int front_left = 0;
@@ -180,12 +180,12 @@ void AvoidObstacles(double *linearSpeed,
     if (front_left > 2 || far_left > 2) {
         *evasiveAction = 1;
         std::cout << "Obstacle detected on the left" << std::endl;
-        *linearSpeed = 0.2;
+        *linearSpeed = 0.15;
         *angularSpeed = max_angular_speed;  // turn right
     } else if(front_right > 2 || far_right > 2) {
         *evasiveAction = 1;
         std::cout << "Obstacle detected on the right" << std::endl;
-        *linearSpeed = 0.2;
+        *linearSpeed = 0.15;
         *angularSpeed = -max_angular_speed;  // turn left
     } else {
         if (*evasiveAction==1) {
@@ -245,7 +245,7 @@ bool goToPoint(pf::Point& currentLocation,
         double iterTimeMs = turningTimeMs;
         double iterTimeS = iterTimeMs / 1000000.0;  // Convert microseconds to seconds
  
-        usleep(iterTimeMs / 50);
+        usleep(iterTimeMs / 2);
     } while(fabs(normalizeAngle(requiredYaw - currentYaw)) > 0.01);
     
     pp.SetSpeed(0, 0);
@@ -277,7 +277,11 @@ bool goToPoint(pf::Point& currentLocation,
             return false;
         }
 
-        if ((distanceToTarget - minDistanceToTarget) > 0.2) {
+        currentYaw = pp.GetYaw();
+        double requiredYaw = normalizeAngle(atan2(dy, dx)); // Angle in radians
+        double yawError = normalizeAngle(requiredYaw - currentYaw);
+
+        if ((distanceToTarget - minDistanceToTarget) > 0.2 /* || fabs(yawError) > 0.01 */) {
             pp.SetSpeed(0, 0);
             return false;
         }
@@ -339,6 +343,8 @@ void leaveRoom(pf::Point currentLocation,
     std::cout << "Now exiting room " << roomName << std::endl;
     bool success = false;
     while (!success) {
+        robot.Read();
+        currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
         bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, roomOut, robot, rp);
         if (success) {
             std::cout << "Reached the intermediate point: " << roomOut.toString() << std::endl;
@@ -386,6 +392,8 @@ void enterRoom(pf::Point currentLocation,
     sleep(5);
     bool success = false;
     while (!success) {
+        robot.Read();
+        currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
         bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, roomIn, robot, rp);
         if (success) {
             std::cout << "Reached the intermediate point: " << roomIn.toString() << std::endl;
@@ -397,8 +405,8 @@ void enterRoom(pf::Point currentLocation,
 
 int main(int argc, char *argv[]) {
     try {
-        const double linearSpeed = 0.35;
-        const double angularSpeed = 0.15;
+        const double linearSpeed = 0.3;
+        const double angularSpeed = 0.09;
 
         // Administrative code: json parsing, matrix loading, player/stage proxy initialization, etc...
         auto jsonData = readJsonFile("../csfloor_mapping.json");
