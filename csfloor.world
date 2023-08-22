@@ -1,12 +1,13 @@
 # csfloor.world
 include "map.inc"
 include "robot.inc"
+include "sick.inc"
 
 # Configure the environment
 floorplan
 (
     bitmap "csfloor.png"
-    size [43.780 56.040 3.000]
+    size [43.780 56.040 2.500]
 
 )
 
@@ -14,7 +15,7 @@ floorplan
 window
 (
     size [430 560]
-    scale 100
+    scale 9
 )
 
 # Spawn the robot
@@ -22,6 +23,10 @@ pioneer2dx
 (
     name "robot"
     pose [-8 -14 0 0]
-    odom_error [0 0 0]
-
+    # odom_error [0 0 0]
+    # pioneer2dx's sonars will be ranger:0 and the laser will be ranger:1
+    sicklaser(
+        pose [ 0 0 0 0 ]
+        show_laser 1
+        )
 )
