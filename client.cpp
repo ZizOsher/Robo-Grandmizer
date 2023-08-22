@@ -156,7 +156,7 @@ void AvoidObstacles(double *linearSpeed,
     const double safe_distance = 0.5;  // robot keeps at least 50cm from obstacles
     const double side_threshold = 0.4;  // distance from side walls we want to avoid
     const double max_linear_speed = 0.3;
-    const double max_angular_speed = 0.09;
+    const double max_angular_speed = 0.15;
 
     // Check quadrants for obstacles
     int front_left = 0;
@@ -245,7 +245,7 @@ bool goToPoint(pf::Point& currentLocation,
         double iterTimeMs = turningTimeMs;
         double iterTimeS = iterTimeMs / 1000000.0;  // Convert microseconds to seconds
  
-        usleep(iterTimeMs / 10);
+        usleep(iterTimeMs / 50);
     } while(fabs(normalizeAngle(requiredYaw - currentYaw)) > 0.01);
     
     pp.SetSpeed(0, 0);
@@ -273,13 +273,6 @@ bool goToPoint(pf::Point& currentLocation,
 
         if (evasiveAction == 2) {
             // After avoiding obstacle, reorient to the target
-            // robot.Read();
-            // requiredYaw = normalizeAngle(atan2(dy, dx));
-            // currentLocation.x = msrmnt::world_to_pixel_x(currentWorldX);
-            // currentLocation.y = msrmnt::world_to_pixel_y(currentWorldY);
-            // adjustYaw(pp, currentLocation, target, robot, angularSpeed);
-            // linearSpeed = 0.3;
-            // evasiveAction = 0;
             pp.SetSpeed(0, 0);
             return false;
         }
@@ -395,7 +388,7 @@ void enterRoom(pf::Point currentLocation,
     while (!success) {
         bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, roomIn, robot, rp);
         if (success) {
-            std::cout << "Reached the intermediate point: " << roomOut.toString() << std::endl;
+            std::cout << "Reached the intermediate point: " << roomIn.toString() << std::endl;
             break;
         }
     }
@@ -405,7 +398,7 @@ void enterRoom(pf::Point currentLocation,
 int main(int argc, char *argv[]) {
     try {
         const double linearSpeed = 0.35;
-        const double angularSpeed = 0.09;
+        const double angularSpeed = 0.15;
 
         // Administrative code: json parsing, matrix loading, player/stage proxy initialization, etc...
         auto jsonData = readJsonFile("../csfloor_mapping.json");
@@ -472,6 +465,7 @@ int main(int argc, char *argv[]) {
         double elapsedTime = 0.0;
         double waypointTime = 35;    // aproximate seconds spent at each waypoint
         totalTimeEstimate += waypoints.size() * waypointTime;
+        totalTimeEstimate = totalTimeEstimate *2;
         
         std::cout << "Round trip room order: " << std::endl;
         for (int i = 0; i < roundTripPath.size() - 1; i++) {
@@ -518,6 +512,7 @@ int main(int argc, char *argv[]) {
                     std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
                     j++;
                 }
+                robot.Read();
                 currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
             }
             int timeAfter = time(NULL);
@@ -525,7 +520,7 @@ int main(int argc, char *argv[]) {
             elapsedTime += timeToCurrentWaypoint;
             
             // Invoke the door behavior
-            std::cout << "Arrived at room: " << findRoomNameByPoint(roomNameToInOut, roundTripPath[i]) << ". And it only took me " << timeToCurrentWaypoint << " seconds" << std::endl;
+            std::cout << "Arrived at room: " << findRoomNameByPoint(roomNameToInOut, roundTripPath[i]) << ". And it only took me " << timeToCurrentWaypoint/60 << " minutes" << std::endl;
             currentRoom = findRoomNameByPoint(roomNameToInOut, roundTripPath[i]);
             enterRoom(currentLocation,
                         currentRoom,
@@ -543,7 +538,9 @@ int main(int argc, char *argv[]) {
                 std::cout << "Robot: " << std::endl;
                 std::cout << "\"Hey, listen up! I have been sent to invite you to meet me and two others at the Robotics lab in ";
                 std::cout << "about " << (totalTimeEstimate - elapsedTime)/60 << " minutes. \n See you there!\"" << std::endl << std::endl;
-                
+                robot.Read();
+                currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
+
                 leaveRoom(currentLocation,
                             currentRoom,
                             doorToRoomName,
@@ -557,6 +554,7 @@ int main(int argc, char *argv[]) {
 
                 std::cout << "CurrentLocation: " << std::get<1>(roomNameToInOut[currentRoom]).toString() << std::endl;
                 std::cout << "Current Location based on odometry: " << msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos()).toString() << std::endl;
+                robot.Read();
                 currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
                 currentRoom = "hallway";
             }
@@ -570,7 +568,9 @@ int main(int argc, char *argv[]) {
         std::cout << "Get a load of this:" << std::endl;
         std::cout << "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=TLPQMjIwODIwMjNjsmgphzecSw&index=4" << std::endl;
         // After all waypoints have been reached and we're back at the starting location
-        std::cout << "Now that we're all here, we can party!" << std::endl;
+        sleep(3);
+        std::cout << "Ok, ok, I'm just kidding. I'm actually here to tell you that I'm done with my path. And this is probably more fitting: " << std::endl;
+        std::cout << "https://www.youtube.com/watch?v=9p_Si21ig7c&t=91s" << std::endl;
         sleep(10);
         std::cout << "Robot: " << std::endl;
         std::cout << "\"Oh by the way, my original time estimate for the complete path was:" << totalTimeEstimate/60 << " minutes.\"" << std::endl;
