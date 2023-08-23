@@ -55,12 +55,12 @@ void AvoidObstacles(double *linearSpeed,
         *evasiveAction = 1;
         std::cout << "Obstacle detected on the left" << std::endl;
         *linearSpeed = 0.15;
-        *angularSpeed = max_angular_speed;  // turn right
+        *angularSpeed = -max_angular_speed;  // turn right
     } else if(front_right > 2 || far_right > 2) {
         *evasiveAction = 1;
         std::cout << "Obstacle detected on the right" << std::endl;
         *linearSpeed = 0.15;
-        *angularSpeed = -max_angular_speed;  // turn left
+        *angularSpeed = max_angular_speed;  // turn left
     } else {
         if (*evasiveAction==1) {
             *evasiveAction = 2;
@@ -117,6 +117,7 @@ bool goToPoint(pf::Point& currentLocation,
     double minDistanceToTarget = std::numeric_limits<double>::max(); // Initialized with a large value
     
     int evasiveAction = 0;
+    angularSpeed = 0;
     do {
         robot.Read();
 
@@ -142,13 +143,13 @@ bool goToPoint(pf::Point& currentLocation,
         double requiredYaw = normalizeAngle(atan2(dy, dx)); // Angle in radians
         double yawError = normalizeAngle(requiredYaw - currentYaw);
 
-        if ((distanceToTarget - minDistanceToTarget) > 0.2 /* || fabs(yawError) > 0.01 */) {
+        if ((distanceToTarget - minDistanceToTarget) > 0.2) {
             pp.SetSpeed(0, 0);
             return false;
         }
 
         if (distanceToTarget > 0.1) {
-            pp.SetSpeed(linearSpeed, 0);
+            pp.SetSpeed(linearSpeed, angularSpeed);
         }
 
         double drivingTimeMs = (distanceToTarget / linearSpeed) * 1000000; // This gives time in microseconds
@@ -334,7 +335,7 @@ int main(int argc, char *argv[]) {
         double elapsedTime = 0.0;
         double waypointTime = 35;    // aproximate seconds spent at each waypoint
         totalTimeEstimate += waypoints.size() * waypointTime;
-        totalTimeEstimate = totalTimeEstimate * 1.5; // Add 50% to the total time estimate to account for delays
+        totalTimeEstimate = totalTimeEstimate * 1.25; // Add 25% to the total time estimate to account for delays
         
         std::cout << "Round trip room order: " << std::endl;
         for (int i = 0; i < roundTripPath.size() - 1; i++) {
