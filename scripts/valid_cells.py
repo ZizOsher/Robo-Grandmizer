@@ -1,4 +1,4 @@
-with open('binary_image.txt', 'r') as infile, open('output.txt', 'w') as outfile:
+with open('../binary_image.txt', 'r') as infile, open('../output.txt', 'w') as outfile:
     for i, line in enumerate(infile):
         for j, val in enumerate(line.split()):
             if val == '0':

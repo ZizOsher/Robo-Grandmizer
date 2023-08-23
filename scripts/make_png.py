@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load the data from the text file into a numpy array.
-data = np.loadtxt('binary_image.txt')
+data = np.loadtxt('../binary_image.txt')
 
 # Flip the data in the up/down direction.
 data = np.flipud(data)
@@ -17,5 +17,5 @@ plt.imshow(data, cmap=cmap, origin='lower')
 plt.axis('off')
 
 # Save the image.
-plt.savefig('floor.png')
+plt.savefig('../floor.png')
 

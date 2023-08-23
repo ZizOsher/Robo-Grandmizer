@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 # image_path = 'bitmaps/floor-3.png'
-image_path = 'csfloor.png'
+image_path = '../csfloor.png'
 
 # Open the image file
 with Image.open(image_path) as img:
@@ -31,7 +31,7 @@ print("Number of columns: ", num_columns)
 
 
 # Save the binary image array to a text file
-with open('binary_image.txt', 'w') as f:
+with open('../binary_image.txt', 'w') as f:
     for row in binary_image_array:
         row_string = ' '.join(str(pixel) for pixel in row)
         f.write(row_string + os.linesep)
