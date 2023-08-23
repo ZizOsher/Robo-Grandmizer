@@ -16,7 +16,7 @@ Running Compiled Program:
 2. Now, you are going to need two terminals open - one to run player/stage and the other to run the compiled client.
 3. If your current working directory is not the base directory fot the project change your current directory to it. Now in the first terminal run:
 
-    Player cs_floor_nav.cfg
+    player cs_floor_nav.cfg
 
 4. One Player/Stage is up and running, Run the following in the second terminal:
     cd build
