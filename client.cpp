@@ -473,7 +473,7 @@ int main(int argc, char *argv[]) {
         double elapsedTime = 0.0;
         double waypointTime = 35;    // aproximate seconds spent at each waypoint
         totalTimeEstimate += waypoints.size() * waypointTime;
-        totalTimeEstimate = totalTimeEstimate *2;
+        totalTimeEstimate = totalTimeEstimate * 1.5; // Add 50% to the total time estimate to account for delays
         
         std::cout << "Round trip room order: " << std::endl;
         for (int i = 0; i < roundTripPath.size() - 1; i++) {
@@ -575,7 +575,6 @@ int main(int argc, char *argv[]) {
         std::cout << std::endl;
         std::cout << "Get a load of this:" << std::endl;
         std::cout << "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=TLPQMjIwODIwMjNjsmgphzecSw&index=4" << std::endl;
-        // After all waypoints have been reached and we're back at the starting location
         sleep(3);
         std::cout << "Ok, ok, I'm just kidding. I'm actually here to tell you that I'm done with my path. And this is probably more fitting: " << std::endl;
         std::cout << "https://www.youtube.com/watch?v=9p_Si21ig7c&t=91s" << std::endl;
