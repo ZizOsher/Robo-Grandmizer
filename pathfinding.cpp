@@ -12,6 +12,7 @@
 
 using namespace PlayerCc;
 namespace pf = Pathfinding;
+namespace msrmnt = Measurements;
 
 bool pf::Point::operator==(const pf::Point& other) const {
     return x == other.x && y == other.y;
@@ -409,4 +410,124 @@ std::vector<pf::Point> computeOrderlyPath(
     }
     
     return resPath;
+}
+
+std::string findRoomNameByPoint(const std::map<std::string,
+                                std::tuple<pf::Point, pf::Point>>& roomMap,
+                                const pf::Point& target) {
+    for (const auto& entry : roomMap) {
+        const auto& inPoint = std::get<0>(entry.second);
+        const auto& outPoint = std::get<1>(entry.second);
+
+        if (inPoint == target || outPoint == target) {
+            return entry.first;
+        }
+    }
+    return "";  // Return an empty string if not found.
+}
+
+std::vector<pf::Point> getPath(const Eigen::MatrixXd& matrix, 
+                                const pf::Point& start,
+                                const pf::Point& target,
+                                const std::map<std::tuple<pf::Point, pf::Point>, std::string>& RoomDoorMapping,
+                                const std::map<std::string, std::tuple<pf::Point, pf::Point>>& roomNameToInOut) {
+    std::vector<pf::Point> path = astar(matrix, start, target);
+    path.insert(path.begin(), start);
+    std::vector<pf::Point> orderlyPath = computeOrderlyPath(path, RoomDoorMapping, roomNameToInOut);
+    orderlyPath.erase(orderlyPath.begin());
+    std::vector<pf::Point> truePath = getTruePath(orderlyPath, start, matrix, 3);
+    return truePath;
+}
+
+double normalizeAngle(double angle) {
+    while (angle > M_PI) angle -= 2 * M_PI;
+    while (angle < -M_PI) angle += 2 * M_PI;
+    return angle;
+}
+
+double timeToTurnInMicroseconds(double xRadians, double angularSpeed) {
+    double timeInSeconds = xRadians / angularSpeed;
+    return timeInSeconds * 1e6; // Convert time to microseconds
+}
+
+double estimateTime(const std::vector<pf::Point>& truePath,
+                    double linearSpeed, 
+                    double angularSpeed,
+                    const pf::Point& startingLocation) {
+    double totalTime = 0.0;
+    pf::Point currentLocation = startingLocation;
+
+    for (int i=0; i<truePath.size() -1; i++) {
+        // Calculating difference in x and y
+        double currentWorldX = msrmnt::pixel_to_world_x(currentLocation.x);
+        double currentWorldY = msrmnt::pixel_to_world_y(currentLocation.y);
+        double targetWorldX = msrmnt::pixel_to_world_x(truePath[i].x);
+        double targetWorldY = msrmnt::pixel_to_world_y(truePath[i].y);
+        double dx = targetWorldX - currentWorldX;
+        double dy = targetWorldY - currentWorldY;
+
+        // Time to Turn:
+        double requiredYaw = normalizeAngle(atan2(dy, dx)); // Angle in radians
+        double currentYaw = 0; // Assuming robot starts with yaw of 0 for simplicity.
+        double yawError = normalizeAngle(requiredYaw - currentYaw);
+        totalTime += std::abs(yawError) / angularSpeed;
+
+        // Time to Move:
+        double distanceToTarget = sqrt(dx*dx + dy*dy);
+        totalTime += distanceToTarget / linearSpeed;
+
+        currentLocation = truePath[i];
+    }
+    return totalTime;
+}
+
+// Compute the round trip based on time estimation as the distance metric.
+RoundTrip computeRoundTrip(const pf::Point& start,
+                                        const std::vector<pf::Point>& destinations,
+                                        const Eigen::MatrixXd& matrix,
+                                        const std::map<std::tuple<pf::Point, pf::Point>, std::string>& doorToRoomName,
+                                        const std::map<std::string, std::tuple<pf::Point, pf::Point>>& roomNameToInOut,
+                                        double linearSpeed,
+                                        double angularSpeed) {
+    std::vector<pf::Point> unvisited = destinations;
+    std::vector<pf::Point> result;
+    std::vector<double> segmentTimes;
+    double time = 0.0;
+    
+    pf::Point current = start;
+
+    while (!unvisited.empty()) {
+        double shortestTime = std::numeric_limits<double>::max();
+        pf::Point closestPoint;
+        if (unvisited.size() == 1) {
+            closestPoint = unvisited[0];
+            std::vector<pf::Point> path = getPath(matrix, current, closestPoint, doorToRoomName, roomNameToInOut);
+            double estimatedTime = estimateTime(path, linearSpeed, angularSpeed, current);
+            segmentTimes.push_back(estimatedTime);
+            time += estimatedTime;
+            result.push_back(closestPoint);
+            path = getPath(matrix, closestPoint, start, doorToRoomName, roomNameToInOut);
+            estimatedTime = estimateTime(path, linearSpeed, angularSpeed, current);
+            segmentTimes.push_back(estimatedTime);
+            time += estimatedTime;
+            result.push_back(start);
+            break;
+        } else {
+            for (const pf::Point& next : unvisited) {
+                // Compute the path and estimate the time to travel the path.
+                std::vector<pf::Point> path = getPath(matrix, current, next, doorToRoomName, roomNameToInOut);
+                double estimatedTime = estimateTime(path, linearSpeed, angularSpeed, current);
+                if (estimatedTime < shortestTime) {
+                    shortestTime = estimatedTime;
+                    closestPoint = next;
+                }
+            }
+        }
+        result.push_back(closestPoint);
+        segmentTimes.push_back(shortestTime);
+        time += shortestTime;
+        unvisited.erase(std::remove(unvisited.begin(), unvisited.end(), closestPoint), unvisited.end());
+        current = closestPoint;
+    }
+    return {result, segmentTimes, time};
 }

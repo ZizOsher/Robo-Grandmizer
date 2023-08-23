@@ -43,6 +43,12 @@ struct ComparePoints {
     bool operator()(const pf::Point& a, const pf::Point& b) const;
 };
 
+struct RoundTrip {
+    std::vector<pf::Point> path;
+    std::vector<double> segmentTimes;
+    double totalTime;
+};
+
 // double distance(const pf::Point& a, const pf::Point& b);
 int countOnesInRadius(const Eigen::MatrixXd& matrix, int y, int x, int radius);
 std::vector<pf::Point> reconstructPath(const std::map<pf::Point, pf::Point, ComparePoints>& cameFrom, const pf::Point& current);
@@ -52,11 +58,34 @@ Eigen::MatrixXd loadMatrix(const std::string& filename);
 bool isPathClear(const Eigen::MatrixXd& matrix, const pf::Point& start, const pf::Point& end, int b);
 std::vector<pf::Point> getTruePath(const std::vector<pf::Point>& path, pf::Point start, const Eigen::MatrixXd& matrix, int b);
 
-std::vector<pf::Point> computeOrderlyPath(
-    std::vector<pf::Point>& path, 
+std::vector<pf::Point> computeOrderlyPath(std::vector<pf::Point>& path, 
                                             const std::map<std::tuple<pf::Point, pf::Point>, std::string>& RoomDoorMapping,
                                             const std::map<std::string, std::tuple<pf::Point, pf::Point>>& RoomData);
 
 bool doSegmentsIntersect(const pf::Point& p1, const pf::Point& q1, const pf::Point& p2, const pf::Point& q2);
 bool onSegment(const pf::Point& p, const pf::Point& q, const pf::Point& r);
+
+std::vector<pf::Point> getPath(const Eigen::MatrixXd& matrix, 
+                                const pf::Point& start,
+                                const pf::Point& target,
+                                const std::map<std::tuple<pf::Point, pf::Point>, std::string>& RoomDoorMapping,
+                                const std::map<std::string, std::tuple<pf::Point, pf::Point>>& roomNameToInOut);
+std::string findRoomNameByPoint(const std::map<std::string,
+                                std::tuple<pf::Point, pf::Point>>& roomMap,
+                                const pf::Point& target);
+double normalizeAngle(double angle);
+double timeToTurnInMicroseconds(double xRadians, double angularSpeed);
+double estimateTime(const std::vector<pf::Point>& truePath,
+                    double linearSpeed, 
+                    double angularSpeed,
+                    const pf::Point& startingLocation);
+RoundTrip computeRoundTrip(const pf::Point& start,
+                                        const std::vector<pf::Point>& destinations,
+                                        const Eigen::MatrixXd& matrix,
+                                        const std::map<std::tuple<pf::Point, pf::Point>, std::string>& doorToRoomName,
+                                        const std::map<std::string, std::tuple<pf::Point, pf::Point>>& roomNameToInOut,
+                                        double linearSpeed,
+                                        double angularSpeed);
+
+
 #endif // PATHFINDING_HPP
