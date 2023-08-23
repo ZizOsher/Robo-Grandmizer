@@ -54,12 +54,12 @@ void AvoidObstacles(double *linearSpeed,
     if (front_left > 2 || far_left > 2) {
         *evasiveAction = 1;
         std::cout << "Obstacle detected on the left" << std::endl;
-        *linearSpeed = 0.15;
+        *linearSpeed = 0.1;
         *angularSpeed = -max_angular_speed;  // turn right
     } else if(front_right > 2 || far_right > 2) {
         *evasiveAction = 1;
         std::cout << "Obstacle detected on the right" << std::endl;
-        *linearSpeed = 0.15;
+        *linearSpeed = 0.1;
         *angularSpeed = max_angular_speed;  // turn left
     } else {
         if (*evasiveAction==1) {
@@ -190,7 +190,7 @@ void leaveRoom(pf::Point currentLocation,
         while (j < path.size()) {
             bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, path[j], robot, rp);
             if (success) {
-                std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
+                // std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
                 j++;
             }
         }
@@ -209,7 +209,7 @@ void leaveRoom(pf::Point currentLocation,
         currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
         bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, roomOut, robot, rp);
         if (success) {
-            std::cout << "Reached the intermediate point: " << roomOut.toString() << std::endl;
+            // std::cout << "Reached the intermediate point: " << roomOut.toString() << std::endl;
             break;
         }
     }
@@ -240,7 +240,7 @@ void enterRoom(pf::Point currentLocation,
         while (j < path.size()) {
             bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, path[j], robot, rp);
             if (success) {
-                std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
+                // std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
                 j++;
             }
         }
@@ -258,7 +258,7 @@ void enterRoom(pf::Point currentLocation,
         currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
         bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, roomIn, robot, rp);
         if (success) {
-            std::cout << "Reached the intermediate point: " << roomIn.toString() << std::endl;
+            // std::cout << "Reached the intermediate point: " << roomIn.toString() << std::endl;
             break;
         }
     }
@@ -293,7 +293,7 @@ int main(int argc, char *argv[]) {
         std::cout << std::endl;
         sleep(1);
 
-        std::cout << "CurrentLocation: " << currentLocation.x << ", " << currentLocation.y << std::endl;
+        // std::cout << "CurrentLocation: " << currentLocation.x << ", " << currentLocation.y << std::endl;
         robot.Read();      
         std::string room1;
         std::string room2;
@@ -333,9 +333,9 @@ int main(int argc, char *argv[]) {
         
         double totalTimeEstimate = roundTrip.totalTime;
         double elapsedTime = 0.0;
-        double waypointTime = 35;    // aproximate seconds spent at each waypoint
+        double waypointTime = 50;    // aproximate seconds spent at each waypoint
         totalTimeEstimate += waypoints.size() * waypointTime;
-        totalTimeEstimate = totalTimeEstimate * 1.25; // Add 25% to the total time estimate to account for delays
+        totalTimeEstimate = totalTimeEstimate * 1.2; // Add 20% to the total time estimate to account for delays
         
         std::cout << "Round trip room order: " << std::endl;
         for (int i = 0; i < roundTripPath.size() - 1; i++) {
@@ -358,8 +358,8 @@ int main(int argc, char *argv[]) {
                     matrix,
                     rp);
 
-        std::cout << "CurrentLocation: " << std::get<1>(roomNameToInOut[currentRoom]).toString() << std::endl;
-        std::cout << "Current Location based on odometry: " << msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos()).toString() << std::endl;
+        // std::cout << "CurrentLocation: " << std::get<1>(roomNameToInOut[currentRoom]).toString() << std::endl;
+        // std::cout << "Current Location based on odometry: " << msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos()).toString() << std::endl;
         currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
         currentRoom = "hallway";
         
@@ -368,18 +368,20 @@ int main(int argc, char *argv[]) {
             int timeBefore = time(NULL);
             std::vector<pf::Point> path = getPath(matrix, currentLocation, roundTripPath[i], doorToRoomName, roomNameToInOut);
             
-            std::cout << "Path to waypoint: " << roundTripPath[i].toString() << std::endl;
-            for (int j = 0; j < path.size(); j++) {
-                std::cout << path[j].toString() << ", ";
-            }
-            std::cout << std::endl;
+            std::cout << "Driving to " << roundTripPath[i].toString() << std::endl;
+
+            // std::cout << "Path to waypoint: " << roundTripPath[i].toString() << std::endl;
+            // for (int j = 0; j < path.size(); j++) {
+            //     std::cout << path[j].toString() << ", ";
+            // }
+            // std::cout << std::endl;
 
             // Drive using goToPoint
             int j = 0;
             while (j < path.size()) {
                 bool success = goToPoint(currentLocation, pp, linearSpeed, angularSpeed, path[j], robot, rp);
                 if (success) {
-                    std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
+                    // std::cout << "Reached the intermediate point: " << path[j].toString() << std::endl;
                     j++;
                 }
                 robot.Read();
@@ -402,7 +404,7 @@ int main(int argc, char *argv[]) {
                         angularSpeed,
                         matrix,
                         rp);
-            std::cout << "after entering" << std::endl;
+            // std::cout << "after entering" << std::endl;
             if (i < roundTripPath.size() - 1) {
                 std::cout << std::endl;
                 std::cout << "Robot: " << std::endl;
@@ -422,8 +424,8 @@ int main(int argc, char *argv[]) {
                             matrix,
                             rp);
 
-                std::cout << "CurrentLocation: " << std::get<1>(roomNameToInOut[currentRoom]).toString() << std::endl;
-                std::cout << "Current Location based on odometry: " << msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos()).toString() << std::endl;
+                // std::cout << "CurrentLocation: " << std::get<1>(roomNameToInOut[currentRoom]).toString() << std::endl;
+                // std::cout << "Current Location based on odometry: " << msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos()).toString() << std::endl;
                 robot.Read();
                 currentLocation = msrmnt::world_to_pixel(pp.GetXPos(),pp.GetYPos());
                 currentRoom = "hallway";

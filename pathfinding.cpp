@@ -121,7 +121,7 @@ std::vector<pf::Point> astar(const Eigen::MatrixXd& matrix,
     std::set<pf::Point, ComparePoints> closedList;
 
     costSoFar[start] = 0;
-    pf::Node startNode {start, 0.0, heuristic(start, target)};
+    pf::Node startNode {start, 0.0, 0};
     queue.push(startNode);
 
     while (!queue.empty()) {
@@ -395,7 +395,6 @@ std::vector<pf::Point> computeOrderlyPath(
 
                 break;
             }
-            //TODO: Add a check for the case of intersection
         }
 
         if (!foundInAnyRectangle) {
