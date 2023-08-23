@@ -6,7 +6,7 @@
 using namespace Pathfinding;
 namespace pf = Pathfinding;
 
-namespace measurements {
+namespace Measurements {
 
     inline double custom_round(double value) {
         return (value > 0.0) ? std::floor(value + 0.5) : std::ceil(value - 0.5);
@@ -76,4 +76,4 @@ namespace measurements {
     double calculate_pixel_distance(const pf::Point& a, const pf::Point& b) {
         return std::sqrt(std::pow(b.x - a.x, 2) + std::pow(b.y - a.y, 2));
     }
-} // namespace measurements
+} // namespace Measurements
